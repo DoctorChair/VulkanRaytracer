@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.7.2)
+
+project(shaders)
+
+find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
+
+add_custom_target(
+    ${PROJECT_NAME}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_SOURCE_DIR}/SPIRV
+    COMMAND powershell ${PROJECT_SOURCE_DIR}/compileShaders.bat ${PROJECT_SOURCE_DIR} ${GLSL_VALIDATOR} ${PROJECT_SOURCE_DIR}/SPIRV
+    )
