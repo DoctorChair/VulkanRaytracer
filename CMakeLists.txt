@@ -18,7 +18,7 @@ add_executable(${PROJECT_NAME}
 
 #add includes
 target_include_directories(${PROJECT_NAME}  PUBLIC
-    "${PROJECT_BINARY_DIR}"
+   "${PROJECT_BINARY_DIR}"
 )
 
 #add ModelLoading subproject

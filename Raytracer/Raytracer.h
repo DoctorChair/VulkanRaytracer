@@ -1,4 +1,5 @@
 #pragma once
+#include "SDL.h"
 #include "VulkanContext.h"
 #include "Buffer.h"
 #include "Framebuffer.h"
@@ -15,10 +16,15 @@
 struct GBuffer
 {
 	VGM::Framebuffer framebuffer;
+
 	VGM::Texture positionBuffer;
+	VkImageView positionView;
 	VGM::Texture normalBuffer;
+	VkImageView normalView;
 	VGM::Texture idBuffer;
+	VkImageView idView;
 	VGM::Texture albedoBuffer;
+	VkImageView albedoView;
 };
 
 struct VertexBuffer
@@ -29,17 +35,24 @@ struct VertexBuffer
 
 struct Material
 {
-
+	uint32_t albedoIndex;
+	uint32_t metallicIndex;
+	uint32_t normalIndex;
+	uint32_t roughnessIndex;
 };
 
 struct Mesh
 {
+	uint32_t indexOffset;
+	uint32_t vertexOffset;
+	uint32_t indicesCount;
+	uint32_t vertexCount;
 	Material material;
 };
 
 struct Model
 {
-
+	std::vector<Mesh> meshes;
 };
 
 struct globalRenderData
@@ -58,11 +71,29 @@ struct CameraData
 class Raytracer
 {
 public:
-
+	Raytracer() = default;
+	void init(uint32_t windowWidth, uint32_t windowHeight);
+	void loadeMesh();
+	void execute();
+	void destroy();
 
 private:
+
+	void initVertexBuffer();
+	void initTextureArrays();
+	void initgBuffers();
+	void initDescripotrSetAllocator();
+	void initgBufferDescriptorSets();
+	void initGBufferShader();
+	void initCommandBuffers();
+	void initSyncStructures();
+
 	VGM::VulkanContext renderContext;
 	SDL_Window* window;
+	uint32_t windowWidth;
+	uint32_t windowHeight;
+
+	uint32_t _maxBuffers  = 3;
 
 	VGM::Texture _albedoTextureArray;
 	VGM::Texture _metallicTextureArray;
@@ -77,4 +108,10 @@ private:
 
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 
+	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
+	std::vector<VGM::CommandBuffer> _renderCommandBuffers;
+
+	std::vector<VkFence> _renderFences;
+	std::vector<VkSemaphore> _renderSeamphores;
+	std::vector<VkSemaphore> _avaialableSemaphore;
 };
