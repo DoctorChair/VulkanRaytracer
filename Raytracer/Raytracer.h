@@ -50,6 +50,12 @@ struct Mesh
 	Material material;
 };
 
+struct DrawData
+{
+	glm::mat4 modelMatrix;
+	Material material;
+};
+
 struct Model
 {
 	std::vector<Mesh> meshes;
@@ -57,7 +63,7 @@ struct Model
 
 struct globalRenderData
 {
-	
+	float fog;
 };
 
 struct CameraData
@@ -66,6 +72,13 @@ struct CameraData
 	glm::mat4 projectionMatrix;
 	glm::mat4 cameraMatrix;
 	glm::vec3 cameraPosition;
+};
+
+struct FrameSynchro
+{
+	VkSemaphore _availabilitySemaphore;
+	VkSemaphore _renderSemaphore;
+	VkFence _renderFence;
 };
 
 class Raytracer
@@ -78,7 +91,6 @@ public:
 	void destroy();
 
 private:
-
 	void initVertexBuffer();
 	void initTextureArrays();
 	void initgBuffers();
@@ -87,6 +99,7 @@ private:
 	void initGBufferShader();
 	void initCommandBuffers();
 	void initSyncStructures();
+	void initDataBuffers();
 
 	VGM::VulkanContext renderContext;
 	SDL_Window* window;
@@ -94,11 +107,23 @@ private:
 	uint32_t windowHeight;
 
 	uint32_t _maxBuffers  = 3;
+	uint32_t _maxDrawCount = 1000;
 
 	VGM::Texture _albedoTextureArray;
+	VkSampler _albedoSampler;
+	VkImageView _albedoTextureView;
+
 	VGM::Texture _metallicTextureArray;
+	VkSampler _metallicSampler;
+	VkImageView _metallicTextureView;
+
 	VGM::Texture _normalTextureArray;
+	VkSampler _normalSampler;
+	VkImageView _normalTextureView;
+
 	VGM::Texture _roughnessTextureArray;
+	VkSampler _roughnessSampler;
+	VkImageView _roughnessTextureView;
 
 	VertexBuffer _vertexBuffer;
 
@@ -109,9 +134,14 @@ private:
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
+	uint32_t _currentFrameIndex = 0;
 	std::vector<VGM::CommandBuffer> _renderCommandBuffers;
+	std::vector<FrameSynchro> _frameSynchroStructs;
+	std::vector<VGM::Buffer> _cameraBuffers;
+	std::vector<VGM::Buffer> _globalRenderDataBuffers;
+	std::vector<VGM::Buffer> _drawDataIsntanceBuffers;
 
-	std::vector<VkFence> _renderFences;
-	std::vector<VkSemaphore> _renderSeamphores;
-	std::vector<VkSemaphore> _avaialableSemaphore;
+	VkDescriptorSetLayout level0Layout;
+	VkDescriptorSetLayout level1Layout;
+	VkDescriptorSetLayout level2Layout;
 };

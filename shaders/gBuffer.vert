@@ -1,25 +1,41 @@
 #version 460
 
 //output variable to the fragment shader
-layout (location = 0) out vec3 outColor;
+layout (location = 0) in vec3 vertexPos;
+layout (location = 1) in vec2 texCoord;
+layout (location = 2) in vec3 normal;
+layout (location = 3) in vec3 tangent;
+layout (location = 4) in vec3 bitangent;
+
+layout (location = 0) out vec3 outPos;
+
+layout(set = 0, binding = 0) uniform  CameraBuffer{
+	mat4 viewMatrix;
+	mat4 projectionMatrix;
+	mat4 cameraMatrix;
+	vec3 cameraPosition;
+} cameraData;
+
+layout(set = 0, binding = 1) uniform  RenderBuffer{
+	float fog;
+} globalDrawData;
+
+
+struct Material
+{
+	uint albedoIndex;
+	uint metallicIndex;
+	uint normalIndex;
+	uint roughnessIndex;	
+};
+
+layout(set = 2, binding = 0) uniform  DrawInstanceBuffer{
+	mat4 modelMatrix;
+	Material material;
+} drawInstanceData;
 
 void main()
 {
-	//const array of positions for the triangle
-	const vec3 positions[3] = vec3[3](
-		vec3(1.f,1.f, 0.0f),
-		vec3(-1.f,1.f, 0.0f),
-		vec3(0.f,-1.f, 0.0f)
-	);
-
-	//const array of colors for the triangle
-	const vec3 colors[3] = vec3[3](
-		vec3(1.0f, 0.0f, 0.0f), //red
-		vec3(0.0f, 1.0f, 0.0f), //green
-		vec3(00.f, 0.0f, 1.0f)  //blue
-	);
-
-	//output the position of each vertex
-	gl_Position = vec4(positions[gl_VertexIndex], 1.0f);
-	outColor = colors[gl_VertexIndex];
+	outPos = vec3(drawInstanceData.modelMatrix * vec4(vertexPos, 1.0f));
+	gl_Position = cameraData.cameraMatrix * drawInstanceData.modelMatrix * vec4(vertexPos, 1.0f);
 }

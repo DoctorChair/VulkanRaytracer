@@ -21,29 +21,56 @@ void Raytracer::init(uint32_t windowWidth, uint32_t windowHeight)
 		{ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, &features13);
 
 	initVertexBuffer();
-	
 	initTextureArrays();
-
 	initDescripotrSetAllocator();
-
 	initgBufferDescriptorSets();
-
 	initgBuffers();
-
 	initGBufferShader();
-
 	initSyncStructures();
-
 	initCommandBuffers();
+	initDataBuffers();
 }
 
 void Raytracer::loadeMesh()
 {
+
 }
 
 void Raytracer::execute()
 {
+	VkFence renderFence = _frameSynchroStructs[_currentFrameIndex]._renderFence;
+	VkSemaphore renderSemaphore = _frameSynchroStructs[_currentFrameIndex]._renderSemaphore;
+	VkSemaphore availabilitySemaphore = _frameSynchroStructs[_currentFrameIndex]._availabilitySemaphore;
+	
+	VGM::CommandBuffer* cmd = &_renderCommandBuffers[_currentFrameIndex];
+	VGM::Buffer* currentGlobalRenderDataBuffer = &_globalRenderDataBuffers[_currentFrameIndex];
+	VGM::Buffer* currentCameraBuffer = &_cameraBuffers[_currentFrameIndex];
+	VGM::Buffer* currentDrawDataIsntanceBuffers = &_drawDataIsntanceBuffers[_currentFrameIndex];
 
+	VkDescriptorSet level0DescriptorSet;
+	VkDescriptorSet level1DescriptorSet;
+	VkDescriptorSet level2DescriptorSet;
+
+	VkDescriptorBufferInfo globalbufferInfo;
+	globalbufferInfo.buffer = currentGlobalRenderDataBuffer->get();
+	globalbufferInfo.offset = 0;
+	globalbufferInfo.range = currentGlobalRenderDataBuffer->size();
+
+	VkDescriptorBufferInfo camerabufferInfo;
+	globalbufferInfo.buffer = currentCameraBuffer->get();
+	globalbufferInfo.offset = 0;
+	globalbufferInfo.range = currentCameraBuffer->size();
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, camerabufferInfo)
+		.createDescriptorSet(renderContext._device, &level0DescriptorSet, &level0Layout, _descriptorSetAllocator);
+
+	VkDescriptorImageInfo albedoInfo;
+
+	renderContext.aquireNextImageIndex(nullptr);
+
+	_currentFrameIndex = (_currentFrameIndex + 1) % _maxBuffers;
 }
 
 void Raytracer::destroy()
@@ -62,15 +89,43 @@ void Raytracer::initTextureArrays()
 
 	_albedoTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
 		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
+	_albedoTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_albedoTextureView);
 
 	_metallicTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
 		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
+	_metallicTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_metallicTextureView);
 
 	_normalTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
 		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
+	_normalTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_normalTextureView);
 
 	_roughnessTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
 		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
+	_roughnessTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_roughnessTextureView);
+
+	VkSamplerCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	createInfo.pNext = nullptr;
+	createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	createInfo.anisotropyEnable = VK_FALSE;
+	createInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+	createInfo.compareEnable = VK_FALSE;
+	createInfo.flags = 0;
+	createInfo.minFilter = VK_FILTER_LINEAR;
+	createInfo.magFilter = VK_FILTER_LINEAR;
+	createInfo.maxAnisotropy = 8.0f;
+	createInfo.maxLod = 3;
+	createInfo.minLod = 0;
+	createInfo.mipLodBias = 0;
+	createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	createInfo.unnormalizedCoordinates = VK_FALSE;
+
+	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_albedoSampler);
+	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_metallicSampler);
+	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_normalSampler);
+	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_roughnessSampler);
 }
 
 void Raytracer::initgBuffers()
@@ -114,16 +169,34 @@ void Raytracer::initDescripotrSetAllocator()
 
 void Raytracer::initgBufferDescriptorSets()
 {
+	VGM::DescriptorSetLayoutBuilder::begin()
+		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.createDescriptorSetLayout(renderContext._device, &level0Layout);
+
+	VGM::DescriptorSetLayoutBuilder::begin()
+		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.createDescriptorSetLayout(renderContext._device, &level1Layout);
+
+	VGM::DescriptorSetLayoutBuilder::begin()
+		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.createDescriptorSetLayout(renderContext._device, &level2Layout);
 }
 
 void Raytracer::initGBufferShader()
 {
+	VkDescriptorSetLayout setLayouts[] = { level0Layout, level1Layout, level2Layout };
+
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	createInfo.pNext = nullptr;
 	createInfo.flags = 0;
 	createInfo.pushConstantRangeCount = 0;
-	createInfo.setLayoutCount = 0;
+	createInfo.setLayoutCount = 3;
+	createInfo.pSetLayouts = setLayouts;
 
 	vkCreatePipelineLayout(renderContext._device, &createInfo, nullptr, &_gBufferPipelineLayout);
 
@@ -147,6 +220,13 @@ void Raytracer::initGBufferShader()
 	configurator.setInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	configurator.setColorBlendingState(colorBlendAttachments);
 	//configurator.setDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
+
+	configurator.addVertexAttribInputDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0); //Position
+	configurator.addVertexAttribInputDescription(1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(float)); //texCoord
+	configurator.addVertexAttribInputDescription(2, 0, VK_FORMAT_R32G32B32_SFLOAT, 5 * sizeof(float)); //normal
+	configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32B32_SFLOAT, 8 * sizeof(float)); //tangent
+	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //bitangant
+	configurator.addVertexInputInputBindingDescription(0, 14 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
 
 	_gBufferShader = VGM::ShaderProgram(sources, _gBufferPipelineLayout, configurator, renderContext._device);
 }
@@ -174,13 +254,25 @@ void Raytracer::initSyncStructures()
 	semaphoreCreateInfo.pNext = nullptr;
 	semaphoreCreateInfo.flags = 0;
 
-	_renderFences.resize(_maxBuffers);
-	_renderSeamphores.resize(_maxBuffers);
-	_avaialableSemaphore.resize(_maxBuffers);
+	_frameSynchroStructs.resize(_maxBuffers);
 	for (unsigned int i = 0; i < _maxBuffers; i++)
 	{
-		vkCreateFence(renderContext._device, &fenceCreateInfo, nullptr, &_renderFences[i]);
-		vkCreateSemaphore(renderContext._device, &semaphoreCreateInfo, nullptr, &_renderSeamphores[i]);
-		vkCreateSemaphore(renderContext._device, &semaphoreCreateInfo, nullptr, &_avaialableSemaphore[i]);
+		vkCreateFence(renderContext._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._renderFence);
+		vkCreateSemaphore(renderContext._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._renderSemaphore);
+		vkCreateSemaphore(renderContext._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._availabilitySemaphore);
+	}
+}
+
+void Raytracer::initDataBuffers()
+{
+	_drawDataIsntanceBuffers.resize(_maxBuffers);
+	_cameraBuffers.resize(_maxBuffers);
+	_globalRenderDataBuffers.resize(_maxBuffers);
+
+	for(unsigned int i = 0; i<_maxBuffers; i++)
+	{
+		_drawDataIsntanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, _maxDrawCount * sizeof(DrawData), renderContext._gpuAllocator);
+		_cameraBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraData), renderContext._gpuAllocator);
+		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(globalRenderData), renderContext._gpuAllocator);
 	}
 }
