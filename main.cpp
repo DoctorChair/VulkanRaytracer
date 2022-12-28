@@ -9,6 +9,7 @@
 
 #include "VulkanErrorHandling.h"
 
+#include "ModelLoader/ModelLoader.h"
 
 int main(int argc, char* argv[])
 {
@@ -27,6 +28,10 @@ int main(int argc, char* argv[])
 		{"VK_LAYER_KHRONOS_validation"},
 		{VK_KHR_SWAPCHAIN_EXTENSION_NAME}, &features13);
 
+	ModelLoader modelLoader;
+
+	std::string path = "C:\\Users\\Eric\\Downloads\\SunTemple_v4\\SunTemple_v4\\SunTemple\\SunTemple.fbx";
+	ModelData data = modelLoader.loadModel(path);
 	
 	VkDescriptorSetLayout layout;
 	VGM::DescriptorSetLayoutBuilder::begin()

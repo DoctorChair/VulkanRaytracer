@@ -13,5 +13,10 @@ ModelLoader.h
 ModelLoader.cpp
 )
 
+target_include_directories(${PROJECT_NAME} PUBLIC
+"C:/VulkanSDK/1.3.231.1/Include"
+"stb_image.h"
+)
+
 find_package(assimp CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} PUBLIC assimp::assimp)
