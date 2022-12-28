@@ -29,13 +29,20 @@ struct Material
 	uint roughnessIndex;	
 };
 
-layout(set = 2, binding = 0) uniform  DrawInstanceBuffer{
+struct drawInstanceData
+{
 	mat4 modelMatrix;
 	Material material;
-} drawInstanceData;
+};
+
+layout(std140, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
+	drawInstanceData instanceData[];
+} drawData;
 
 void main()
 {
-	outPos = vec3(drawInstanceData.modelMatrix * vec4(vertexPos, 1.0f));
-	gl_Position = cameraData.cameraMatrix * drawInstanceData.modelMatrix * vec4(vertexPos, 1.0f);
+	mat4 model = drawData.instanceData[0].modelMatrix;
+	outPos = vec3(model * vec4(vertexPos, 1.0f));
+
+	gl_Position = cameraData.cameraMatrix * model * vec4(vertexPos, 1.0f);
 }

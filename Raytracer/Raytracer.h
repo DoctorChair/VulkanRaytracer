@@ -94,7 +94,7 @@ private:
 	void initVertexBuffer();
 	void initTextureArrays();
 	void initgBuffers();
-	void initDescripotrSetAllocator();
+	void initDescriptorSetAllocator();
 	void initgBufferDescriptorSets();
 	void initGBufferShader();
 	void initCommandBuffers();

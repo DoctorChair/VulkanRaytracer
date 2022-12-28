@@ -22,7 +22,7 @@ void Raytracer::init(uint32_t windowWidth, uint32_t windowHeight)
 
 	initVertexBuffer();
 	initTextureArrays();
-	initDescripotrSetAllocator();
+	initDescriptorSetAllocator();
 	initgBufferDescriptorSets();
 	initgBuffers();
 	initGBufferShader();
@@ -45,7 +45,7 @@ void Raytracer::execute()
 	VGM::CommandBuffer* cmd = &_renderCommandBuffers[_currentFrameIndex];
 	VGM::Buffer* currentGlobalRenderDataBuffer = &_globalRenderDataBuffers[_currentFrameIndex];
 	VGM::Buffer* currentCameraBuffer = &_cameraBuffers[_currentFrameIndex];
-	VGM::Buffer* currentDrawDataIsntanceBuffers = &_drawDataIsntanceBuffers[_currentFrameIndex];
+	VGM::Buffer* currentDrawDataInstanceBuffer = &_drawDataIsntanceBuffers[_currentFrameIndex];
 
 	VkDescriptorSet level0DescriptorSet;
 	VkDescriptorSet level1DescriptorSet;
@@ -57,9 +57,9 @@ void Raytracer::execute()
 	globalbufferInfo.range = currentGlobalRenderDataBuffer->size();
 
 	VkDescriptorBufferInfo camerabufferInfo;
-	globalbufferInfo.buffer = currentCameraBuffer->get();
-	globalbufferInfo.offset = 0;
-	globalbufferInfo.range = currentCameraBuffer->size();
+	camerabufferInfo.buffer = currentCameraBuffer->get();
+	camerabufferInfo.offset = 0;
+	camerabufferInfo.range = currentCameraBuffer->size();
 
 	VGM::DescriptorSetBuilder::begin()
 		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo)
@@ -67,9 +67,57 @@ void Raytracer::execute()
 		.createDescriptorSet(renderContext._device, &level0DescriptorSet, &level0Layout, _descriptorSetAllocator);
 
 	VkDescriptorImageInfo albedoInfo;
+	albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	albedoInfo.imageView = _albedoTextureView;
+	albedoInfo.sampler = _albedoSampler;
+
+	VkDescriptorImageInfo metallicInfo;
+	metallicInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	metallicInfo.imageView = _metallicTextureView;
+	metallicInfo.sampler = _metallicSampler;
+
+	VkDescriptorImageInfo normalInfo;
+	normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	normalInfo.imageView = _normalTextureView;
+	normalInfo.sampler = _normalSampler;
+
+	VkDescriptorImageInfo roughnessInfo;
+	roughnessInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	roughnessInfo.imageView = _roughnessTextureView;
+	roughnessInfo.sampler = _roughnessSampler;
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, albedoInfo, nullptr)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, metallicInfo, nullptr)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, normalInfo, nullptr)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, roughnessInfo, nullptr)
+		.createDescriptorSet(renderContext._device, &level1DescriptorSet, &level1Layout, _descriptorSetAllocator);
+	
+	VkDescriptorBufferInfo drawDataInstanceInfo;
+	drawDataInstanceInfo.buffer = currentDrawDataInstanceBuffer->get();
+	drawDataInstanceInfo.offset = 0;
+	drawDataInstanceInfo.range = currentDrawDataInstanceBuffer->size();
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawDataInstanceInfo)
+		.createDescriptorSet(renderContext._device, &level2DescriptorSet, &level2Layout, _descriptorSetAllocator);
+
+	VkDescriptorSet descriptorSets[] = { level0DescriptorSet, level1DescriptorSet, level2DescriptorSet };
 
 	renderContext.aquireNextImageIndex(nullptr);
 
+	cmd->begin(&renderFence, 1, renderContext._device);
+
+	_gBufferShader.cmdBind(cmd->get());
+	vkCmdBindDescriptorSets(cmd->get(), VK_PIPELINE_BIND_POINT_GRAPHICS, _gBufferPipelineLayout, 0, 3, descriptorSets, 0, nullptr);
+	//drawing here
+
+
+	cmd->end();
+	
+	VkPipelineStageFlags waitFlag = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	cmd->submit(&renderSemaphore, 1, &availabilitySemaphore, 1, &waitFlag, renderFence, renderContext._graphicsQeueu);
+	
 	_currentFrameIndex = (_currentFrameIndex + 1) % _maxBuffers;
 }
 
@@ -158,10 +206,11 @@ void Raytracer::initgBuffers()
 	}
 }
 
-void Raytracer::initDescripotrSetAllocator()
+void Raytracer::initDescriptorSetAllocator()
 {
 	std::vector<VkDescriptorPoolSize> poolSizes = {
 	{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+	{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
 	{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10},
 	};
 	_descriptorSetAllocator = VGM::DescriptorSetAllocator(poolSizes, 100, 0, 10, renderContext._device);
@@ -182,7 +231,7 @@ void Raytracer::initgBufferDescriptorSets()
 		.createDescriptorSetLayout(renderContext._device, &level1Layout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
 		.createDescriptorSetLayout(renderContext._device, &level2Layout);
 }
 
@@ -271,7 +320,7 @@ void Raytracer::initDataBuffers()
 
 	for(unsigned int i = 0; i<_maxBuffers; i++)
 	{
-		_drawDataIsntanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, _maxDrawCount * sizeof(DrawData), renderContext._gpuAllocator);
+		_drawDataIsntanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxDrawCount * sizeof(DrawData), renderContext._gpuAllocator);
 		_cameraBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraData), renderContext._gpuAllocator);
 		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(globalRenderData), renderContext._gpuAllocator);
 	}

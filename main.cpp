@@ -17,5 +17,7 @@ int main(int argc, char* argv[])
 	Raytracer raytracer;
 	raytracer.init(500, 500);
 
+	raytracer.execute();
+
 	return 0;
 }
