@@ -25,6 +25,8 @@ struct GBuffer
 	VkImageView idView;
 	VGM::Texture albedoBuffer;
 	VkImageView albedoView;
+	VGM::Texture depthBuffer;
+	VkImageView depthView;
 };
 
 struct VertexBuffer
@@ -77,36 +79,41 @@ struct CameraData
 struct FrameSynchro
 {
 	VkSemaphore _availabilitySemaphore;
-	VkSemaphore _renderSemaphore;
-	VkFence _renderFence;
+	VkSemaphore _presentSemaphore;
+	VkSemaphore _offsceenRenderSemaphore;
+	VkSemaphore _defferedRenderSemaphore;
+	VkFence _offsrceenRenderFence;
+	VkFence _defferedRenderFence;
 };
 
 class Raytracer
 {
 public:
 	Raytracer() = default;
-	void init(uint32_t windowWidth, uint32_t windowHeight);
+	void init(SDL_Window* window);
 	void loadeMesh();
-	void execute();
+	void update();
 	void destroy();
 
 private:
+	void initPresentFramebuffers();
 	void initVertexBuffer();
 	void initTextureArrays();
 	void initgBuffers();
 	void initDescriptorSetAllocator();
 	void initgBufferDescriptorSets();
 	void initGBufferShader();
+	void initDefferedShader();
 	void initCommandBuffers();
 	void initSyncStructures();
 	void initDataBuffers();
+	
 
 	VGM::VulkanContext renderContext;
-	SDL_Window* window;
 	uint32_t windowWidth;
 	uint32_t windowHeight;
 
-	uint32_t _maxBuffers  = 3;
+	uint32_t _concurrencyCount  = 3;
 	uint32_t _maxDrawCount = 1000;
 
 	VGM::Texture _albedoTextureArray;
@@ -131,11 +138,19 @@ private:
 	VkPipelineLayout _gBufferPipelineLayout;
 	std::vector<GBuffer> _gBufferChain;
 
+	VGM::ShaderProgram _defferedShader;
+	VkPipelineLayout _defferedPipelineLayout;
+	std::vector<VGM::Framebuffer> _presentFramebuffers;
+	VkSampler _positionSampler;
+
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
+	std::vector<VGM::DescriptorSetAllocator> _offsecreenDescriptorSetAllocators;
+	std::vector<VGM::DescriptorSetAllocator> _defferedDescriptorSetAllocators;
 
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
 	uint32_t _currentFrameIndex = 0;
-	std::vector<VGM::CommandBuffer> _renderCommandBuffers;
+	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
+	std::vector<VGM::CommandBuffer> _defferedRenderCommandBuffers;
 	std::vector<FrameSynchro> _frameSynchroStructs;
 	std::vector<VGM::Buffer> _cameraBuffers;
 	std::vector<VGM::Buffer> _globalRenderDataBuffers;
@@ -144,4 +159,6 @@ private:
 	VkDescriptorSetLayout level0Layout;
 	VkDescriptorSetLayout level1Layout;
 	VkDescriptorSetLayout level2Layout;
+
+	VkDescriptorSetLayout _defferedLayout;
 };
