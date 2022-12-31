@@ -91,7 +91,10 @@ class Raytracer
 public:
 	Raytracer() = default;
 	void init(SDL_Window* window);
-	void loadeMesh();
+	Mesh loadMesh();
+	void loadTexture();
+	void loadModel();
+	void drawMesh(Mesh mesh, glm::mat4 transform);
 	void update();
 	void destroy();
 
@@ -141,20 +144,31 @@ private:
 	VGM::ShaderProgram _defferedShader;
 	VkPipelineLayout _defferedPipelineLayout;
 	std::vector<VGM::Framebuffer> _presentFramebuffers;
-	VkSampler _positionSampler;
+	VkSampler _gBufferPositionSampler;
 
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 	std::vector<VGM::DescriptorSetAllocator> _offsecreenDescriptorSetAllocators;
 	std::vector<VGM::DescriptorSetAllocator> _defferedDescriptorSetAllocators;
 
-	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
 	uint32_t _currentFrameIndex = 0;
+
+
+	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
 	std::vector<VGM::CommandBuffer> _defferedRenderCommandBuffers;
+
+	VGM::CommandBufferAllocator _transferCommandBufferAllocator;
+	VGM::CommandBuffer _transferCommandBuffer;
+	
 	std::vector<FrameSynchro> _frameSynchroStructs;
+
 	std::vector<VGM::Buffer> _cameraBuffers;
 	std::vector<VGM::Buffer> _globalRenderDataBuffers;
 	std::vector<VGM::Buffer> _drawDataIsntanceBuffers;
+	std::vector<VGM::Buffer> _drawIndirectCommandBuffer;
+
+	std::vector<VkDrawIndexedIndirectCommand> _drawCommandTransferCache;
+	std::vector<DrawData> _drawDataTransferCache;
 
 	VkDescriptorSetLayout level0Layout;
 	VkDescriptorSetLayout level1Layout;
