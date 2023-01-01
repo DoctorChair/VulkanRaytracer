@@ -8,6 +8,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#include "Vertex.h"
 
 struct pbrMaterialData
 {
@@ -23,15 +24,6 @@ struct TextureData
 	uint32_t width;
 	uint32_t height;
 	std::vector<unsigned char> pixels;
-};
-
-struct Vertex 
-{
-	glm::vec3 position;
-	glm::vec2 texCoord;
-	glm::vec3 normal;
-	glm::vec3 tangent;
-	glm::vec3 bitangent;
 };
 
 struct MeshData

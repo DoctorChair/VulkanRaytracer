@@ -17,6 +17,7 @@ Raytracer.cpp
 target_include_directories(${PROJECT_NAME}  PUBLIC
     "${PROJECT_BINARY_DIR}"
     "C:/Users/Eric/projects/VGM/VGM"
+    "C:/Users/Eric/projects/VulkanRaytracing/shared"
 )
 
 #add VGM subproject

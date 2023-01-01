@@ -19,8 +19,14 @@ int main(int argc, char* argv[])
 		1024, 1024,
 		SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
+	ModelLoader loader;
+	ModelData mod = loader.loadModel("C:\\Users\\Eric\\Blender\\Starfighter\\Starfighter.obj");
+
 	Raytracer raytracer;
 	raytracer.init(window);
+
+	Mesh mesh = raytracer.loadMesh(mod.meshes[0].vertices, mod.meshes[0].indices);
+	Mesh mesh2 = raytracer.loadMesh(mod.meshes[3].vertices, mod.meshes[3].indices);
 
 	bool quit = false;
 	SDL_Event e;
@@ -36,6 +42,8 @@ int main(int argc, char* argv[])
 			}
 		}
 
+		raytracer.drawMesh(mesh, glm::mat4(1.0f));
+		raytracer.drawMesh(mesh2, glm::mat4(1.0f));
 		raytracer.update();
 	}
 

@@ -29,7 +29,7 @@ ModelData ModelLoader::loadModel(const std::string& path)
 		_loadedModels.insert(std::make_pair(std::filesystem::path(path).filename().string(), modelData));
 	}
 
-	else return _loadedModels[std::filesystem::path(path).filename().string()];
+	return _loadedModels[std::filesystem::path(path).filename().string()];
 }
 
 void ModelLoader::handleNode(aiNode* node, const aiScene* scene, ModelData& model, const std::string& root)

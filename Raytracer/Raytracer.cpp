@@ -16,13 +16,16 @@ void Raytracer::init(SDL_Window* window)
 	features13.pNext = nullptr;
 	features13.dynamicRendering = true;
 
+	VkPhysicalDeviceFeatures features = {};
+	features.multiDrawIndirect = true;
+
 	renderContext = VGM::VulkanContext(window, 1, 3, 0,
 		{},
 		{ "VK_LAYER_KHRONOS_validation" },
-		{ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, &features13, _concurrencyCount);
+		{ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, &features13, _concurrencyCount, features);
 
 	initPresentFramebuffers();
-	initVertexBuffer();
+	initMeshBuffer();
 	initTextureArrays();
 	initDescriptorSetAllocator();
 	initgBufferDescriptorSets();
@@ -34,9 +37,14 @@ void Raytracer::init(SDL_Window* window)
 	initDataBuffers();
 }
 
-Mesh Raytracer::loadMesh()
+Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
 {
 	Mesh mesh;
+
+	mesh.indicesCount = indices.size();
+	mesh.vertexCount = vertices.size();
+	mesh.indexOffset = _meshBuffer.indices.size() / sizeof(uint32_t);
+	mesh.vertexOffset = _meshBuffer.vertices.size() / sizeof(Vertex);
 
 	VkFence transferFence;
 	VkFenceCreateInfo createInfo = {};
@@ -46,16 +54,19 @@ Mesh Raytracer::loadMesh()
 
 	vkCreateFence(renderContext._device, &createInfo, nullptr, &transferFence);
 
-	VGM::Buffer vertexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 1, renderContext._gpuAllocator);
-	VGM::Buffer indexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 1 * sizeof(uint32_t), renderContext._gpuAllocator);
+	VGM::Buffer vertexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vertices.size() * sizeof(Vertex), renderContext._gpuAllocator);
+	VGM::Buffer indexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, indices.size() * sizeof(uint32_t), renderContext._gpuAllocator);
 
+	vertexTransferBuffer.uploadData(vertices.data(), vertices.size() * sizeof(Vertex), renderContext._gpuAllocator);
+	indexTransferBuffer.uploadData(indices.data(), indices.size() * sizeof(uint32_t), renderContext._gpuAllocator);
+
+	_transferCommandBuffer = VGM::CommandBuffer(_transferCommandBufferAllocator, renderContext._device);
 	_transferCommandBuffer.begin(nullptr, 0, renderContext._device);
-
-	VkBufferCopy vertexRegion;
-	VkBufferCopy indexRegion;
-
-	_vertexBuffer.vertices.cmdCopyBuffer(_transferCommandBuffer.get(), vertexTransferBuffer.get(), 1, &vertexRegion);
-	_vertexBuffer.indices.cmdCopyBuffer(_transferCommandBuffer.get(), indexTransferBuffer.get(), 1, &indexRegion);
+	
+	_meshBuffer.vertices.cmdAppendCopyBuffer(_transferCommandBuffer.get(), 
+		vertexTransferBuffer.get(), vertices.size() * sizeof(Vertex), 0);
+	_meshBuffer.indices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
+		indexTransferBuffer.get(), indices.size() * sizeof(uint32_t), 0);
 
 	_transferCommandBuffer.end();
 	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
@@ -63,6 +74,7 @@ Mesh Raytracer::loadMesh()
 	vkWaitForFences(renderContext._device, 1, &transferFence, VK_TRUE, 99999999);
 	_transferCommandBufferAllocator.reset(renderContext._device);
 	vkDestroyFence(renderContext._device, transferFence, nullptr);
+	_transferCommandBufferAllocator.reset(renderContext._device);
 
 	return mesh;
 }
@@ -120,13 +132,15 @@ void Raytracer::update()
 
 	_drawIndirectCommandBuffer[_currentFrameIndex].uploadData(_drawCommandTransferCache.data(),
 		_drawCommandTransferCache.size() * sizeof(VkDrawIndexedIndirectCommand),
-		0, renderContext._gpuAllocator);
+		renderContext._gpuAllocator);
 	_drawDataIsntanceBuffers[_currentFrameIndex].uploadData(_drawDataTransferCache.data(),
 		_drawDataTransferCache.size() * sizeof(DrawData),
-		0, renderContext._gpuAllocator);
+		renderContext._gpuAllocator);
 
-	_drawCommandTransferCache.clear();
-	_drawDataTransferCache.clear();
+	CameraData cameraData;
+	currentCameraBuffer->uploadData(&cameraData, sizeof(cameraData), renderContext._gpuAllocator);
+	globalRenderData renderData;
+	currentGlobalRenderDataBuffer->uploadData(&renderData, sizeof(renderData), renderContext._gpuAllocator);
 
 	currentOffsceenDescriptorSetAllocator->resetPools(renderContext._device);
 
@@ -193,9 +207,13 @@ void Raytracer::update()
 	//drawCommandHere
 	_gBufferShader.cmdBind(offscreenCmd->get());
 	vkCmdBindDescriptorSets(offscreenCmd->get(), VK_PIPELINE_BIND_POINT_GRAPHICS, _gBufferPipelineLayout, 0, 3, descriptorSets, 0, nullptr);
-	vkCmdDraw(offscreenCmd->get(), 3, 1, 0, 0);
+	//vkCmdDraw(offscreenCmd->get(), 3, 1, 0, 0);
 
-	//vkCmdDrawIndexedIndirect(offscreenCmd->get(), currentDrawIndirectBuffer->get(), 0, 1, sizeof(VkDrawIndexedIndirectCommand));
+	vkCmdBindIndexBuffer(offscreenCmd->get(), _meshBuffer.indices.get(), 0, VK_INDEX_TYPE_UINT32);
+	VkDeviceSize offset = 0;
+	VkBuffer vertexBuffer = _meshBuffer.vertices.get();
+	vkCmdBindVertexBuffers(offscreenCmd->get(), 0, 1, &vertexBuffer, &offset);
+	vkCmdDrawIndexedIndirect(offscreenCmd->get(), currentDrawIndirectBuffer->get(), 0, (uint32_t)_drawCommandTransferCache.size(), sizeof(VkDrawIndexedIndirectCommand));
 
 	currentGBuffer->framebuffer.cmdEndRendering(offscreenCmd->get());
 	currentGBuffer->albedoBuffer.cmdPrepareTextureForFragmentShaderRead(offscreenCmd->get());
@@ -207,8 +225,9 @@ void Raytracer::update()
 	offscreenCmd->end();
 	VkPipelineStageFlags waitFlag = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	offscreenCmd->submit(&offsceenRenderSemaphore, 1, &presentSemaphore, 1, &waitFlag, offscreenRenderFence, renderContext._graphicsQeueu);
-	
 
+	_drawCommandTransferCache.clear();
+	_drawDataTransferCache.clear();
 
 	//DefferedRenderPass
 	defferedCmd = &_defferedRenderCommandBuffers[_currentFrameIndex];
@@ -260,9 +279,10 @@ void Raytracer::initPresentFramebuffers()
 	}
 }
 
-void Raytracer::initVertexBuffer()
+void Raytracer::initMeshBuffer()
 {
-	_vertexBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 100, renderContext._gpuAllocator);
+	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 1000000 * 3 * sizeof(Vertex), renderContext._gpuAllocator);
+	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 1000000 * sizeof(uint32_t), renderContext._gpuAllocator);
 }
 
 void Raytracer::initTextureArrays()
@@ -329,7 +349,7 @@ void Raytracer::initgBuffers()
 		g.depthBuffer = VGM::Texture(VK_FORMAT_D32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, renderContext._gpuAllocator);
 
-		VkClearColorValue clear = { 0, 0, 0 };
+		VkClearColorValue clear = { 0.0f, 1.0f, 0.0f };
 
 		g.positionBuffer.createImageView(0, 1, 0, 1, renderContext._device, &g.positionView);
 		g.framebuffer.bindColorTextureTarget(g.positionView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
@@ -344,7 +364,7 @@ void Raytracer::initgBuffers()
 		g.framebuffer.bindColorTextureTarget(g.albedoView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
 	
 		g.depthBuffer.createImageView(0, 1, 0, 1, renderContext._device, &g.depthView);
-		g.framebuffer.bindDepthTextureTarget(g.depthView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, 0.0f);
+		g.framebuffer.bindDepthTextureTarget(g.depthView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, 1.0f);
 	}
 }
 
@@ -429,12 +449,12 @@ void Raytracer::initGBufferShader()
 	configurator.setColorBlendingState(colorBlendAttachments);
 	configurator.setDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
 
-	//configurator.addVertexAttribInputDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0); //Position
-	//configurator.addVertexAttribInputDescription(1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(float)); //texCoord
-	//configurator.addVertexAttribInputDescription(2, 0, VK_FORMAT_R32G32B32_SFLOAT, 5 * sizeof(float)); //normal
-	//configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32B32_SFLOAT, 8 * sizeof(float)); //tangent
-	//configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //bitangant
-	//configurator.addVertexInputInputBindingDescription(0, 14 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
+	configurator.addVertexAttribInputDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0); //Position
+	configurator.addVertexAttribInputDescription(1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(float)); //texCoord
+	configurator.addVertexAttribInputDescription(2, 0, VK_FORMAT_R32G32B32_SFLOAT, 5 * sizeof(float)); //normal
+	configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32B32_SFLOAT, 8 * sizeof(float)); //tangent
+	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //bitangant
+	configurator.addVertexInputInputBindingDescription(0, 14 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
 
 	_gBufferShader = VGM::ShaderProgram(sources, _gBufferPipelineLayout, configurator, renderContext._device);
 }
@@ -492,6 +512,8 @@ void Raytracer::initCommandBuffers()
 	{
 		c = VGM::CommandBuffer(_renderCommandBufferAllocator, renderContext._device);
 	}
+
+	_transferCommandBufferAllocator = VGM::CommandBufferAllocator(renderContext._transferQueueFamilyIndex, renderContext._device);
 }
 
 void Raytracer::initSyncStructures()

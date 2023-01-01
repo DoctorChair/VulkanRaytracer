@@ -13,6 +13,8 @@
 
 #include "glm/glm.hpp"
 
+#include "Vertex.h"
+
 struct GBuffer
 {
 	VGM::Framebuffer framebuffer;
@@ -29,7 +31,7 @@ struct GBuffer
 	VkImageView depthView;
 };
 
-struct VertexBuffer
+struct MeshBuffer
 {
 	VGM::Buffer vertices;
 	VGM::Buffer indices;
@@ -91,7 +93,7 @@ class Raytracer
 public:
 	Raytracer() = default;
 	void init(SDL_Window* window);
-	Mesh loadMesh();
+	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
 	void loadTexture();
 	void loadModel();
 	void drawMesh(Mesh mesh, glm::mat4 transform);
@@ -100,7 +102,7 @@ public:
 
 private:
 	void initPresentFramebuffers();
-	void initVertexBuffer();
+	void initMeshBuffer();
 	void initTextureArrays();
 	void initgBuffers();
 	void initDescriptorSetAllocator();
@@ -110,7 +112,6 @@ private:
 	void initCommandBuffers();
 	void initSyncStructures();
 	void initDataBuffers();
-	
 
 	VGM::VulkanContext renderContext;
 	uint32_t windowWidth;
@@ -135,7 +136,7 @@ private:
 	VkSampler _roughnessSampler;
 	VkImageView _roughnessTextureView;
 
-	VertexBuffer _vertexBuffer;
+	MeshBuffer _meshBuffer;
 
 	VGM::ShaderProgram _gBufferShader;
 	VkPipelineLayout _gBufferPipelineLayout;

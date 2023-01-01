@@ -16,6 +16,7 @@ ModelLoader.cpp
 target_include_directories(${PROJECT_NAME} PUBLIC
 "C:/VulkanSDK/1.3.231.1/Include"
 "stb_image.h"
+"C:/Users/Eric/projects/VulkanRaytracing/shared"
 )
 
 find_package(assimp CONFIG REQUIRED)
