@@ -58,6 +58,7 @@ struct DrawData
 {
 	glm::mat4 modelMatrix;
 	Material material;
+	uint32_t ID;
 };
 
 struct Model
@@ -94,17 +95,13 @@ public:
 	Raytracer() = default;
 	void init(SDL_Window* window);
 	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
-	void loadTexture();
+	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels);
 	void loadModel();
-	void drawMesh(Mesh mesh, glm::mat4 transform);
+	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void update();
 	void destroy();
 
 private:
-	void initPresentFramebuffers();
-	void initMeshBuffer();
-	void initTextureArrays();
-	void initgBuffers();
 	void initDescriptorSetAllocator();
 	void initgBufferDescriptorSets();
 	void initGBufferShader();
@@ -113,28 +110,23 @@ private:
 	void initSyncStructures();
 	void initDataBuffers();
 
+	void initMeshBuffer();
+	void initgBuffers();
+	void initPresentFramebuffers();
+	void initTextureArrays();
+
 	VGM::VulkanContext renderContext;
 	uint32_t windowWidth;
 	uint32_t windowHeight;
 
 	uint32_t _concurrencyCount  = 3;
 	uint32_t _maxDrawCount = 1000;
+	uint32_t _maxTextureCount = 1024;
+	uint32_t _maxTriangleCount = 10000000;
+	uint32_t _maxMipMapLevels = 3;
 
-	VGM::Texture _albedoTextureArray;
-	VkSampler _albedoSampler;
-	VkImageView _albedoTextureView;
-
-	VGM::Texture _metallicTextureArray;
-	VkSampler _metallicSampler;
-	VkImageView _metallicTextureView;
-
-	VGM::Texture _normalTextureArray;
-	VkSampler _normalSampler;
-	VkImageView _normalTextureView;
-
-	VGM::Texture _roughnessTextureArray;
-	VkSampler _roughnessSampler;
-	VkImageView _roughnessTextureView;
+	std::vector<VGM::Texture> _textures;
+	std::vector<VkImageView> _views;
 
 	MeshBuffer _meshBuffer;
 
@@ -145,14 +137,15 @@ private:
 	VGM::ShaderProgram _defferedShader;
 	VkPipelineLayout _defferedPipelineLayout;
 	std::vector<VGM::Framebuffer> _presentFramebuffers;
-	VkSampler _gBufferPositionSampler;
 
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 	std::vector<VGM::DescriptorSetAllocator> _offsecreenDescriptorSetAllocators;
+	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
+	VkDescriptorSet _textureDescriptorSet;
 	std::vector<VGM::DescriptorSetAllocator> _defferedDescriptorSetAllocators;
 
-	uint32_t _currentFrameIndex = 0;
 
+	uint32_t _currentFrameIndex = 0;
 
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
@@ -174,6 +167,7 @@ private:
 	VkDescriptorSetLayout level0Layout;
 	VkDescriptorSetLayout level1Layout;
 	VkDescriptorSetLayout level2Layout;
+	VkDescriptorSetLayout textureLayout;
 
 	VkDescriptorSetLayout _defferedLayout;
 };

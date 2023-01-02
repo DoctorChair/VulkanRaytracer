@@ -24,17 +24,19 @@ void Raytracer::init(SDL_Window* window)
 		{ "VK_LAYER_KHRONOS_validation" },
 		{ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, &features13, _concurrencyCount, features);
 
-	initPresentFramebuffers();
-	initMeshBuffer();
-	initTextureArrays();
+	
 	initDescriptorSetAllocator();
 	initgBufferDescriptorSets();
-	initgBuffers();
 	initGBufferShader();
 	initDefferedShader();
 	initSyncStructures();
 	initCommandBuffers();
 	initDataBuffers();
+
+	initgBuffers();
+	initPresentFramebuffers();
+	initMeshBuffer();
+	initTextureArrays();
 }
 
 Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
@@ -74,14 +76,91 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 	vkWaitForFences(renderContext._device, 1, &transferFence, VK_TRUE, 99999999);
 	_transferCommandBufferAllocator.reset(renderContext._device);
 	vkDestroyFence(renderContext._device, transferFence, nullptr);
-	_transferCommandBufferAllocator.reset(renderContext._device);
+	
 
 	return mesh;
 }
 
-void Raytracer::drawMesh(Mesh mesh, glm::mat4 transform)
+uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nrChannels)
 {
-	_drawDataTransferCache.push_back({ transform, mesh.material });
+	VkFormat format;
+	switch (nrChannels)
+	{
+	case 1:
+		format = VK_FORMAT_R8_SRGB;
+		break;
+
+	case 2:
+		format = VK_FORMAT_R8G8_SRGB;
+		break;
+
+	case 3:
+		format = VK_FORMAT_R8G8B8_SRGB;
+		break;
+
+	case 4:
+		format = VK_FORMAT_R8G8B8A8_SRGB;
+		break;
+	}
+
+	_textures.emplace_back(VGM::Texture(format, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
+		{ width, height, 1 }, 1, _maxMipMapLevels, renderContext._textureAllocator));
+	VkImageView view;
+	_textures.back().createImageView(0, _maxMipMapLevels, 0, 1, renderContext._device, &view);
+	_views.push_back(view);
+
+	VkFence transferFence;
+	VkFenceCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	createInfo.pNext = nullptr;
+	createInfo.flags = 0;
+
+	vkCreateFence(renderContext._device, &createInfo, nullptr, &transferFence);
+
+	VGM::Buffer pixelTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, pixels.size() * sizeof(unsigned char), renderContext._generalPurposeAllocator);
+	pixelTransferBuffer.uploadData(pixels.data(), pixels.size() * sizeof(unsigned char), renderContext._generalPurposeAllocator);
+
+	_transferCommandBuffer = VGM::CommandBuffer(_transferCommandBufferAllocator, renderContext._device);
+	_transferCommandBuffer.begin(nullptr, 0, renderContext._device);
+
+	_textures.back().cmdUploadTextureData(_transferCommandBuffer.get(), 1, 0, pixelTransferBuffer);
+
+	_transferCommandBuffer.end();
+	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
+	_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, renderContext._transferQeueu);
+	vkWaitForFences(renderContext._device, 1, &transferFence, VK_TRUE, 99999999);
+	_transferCommandBufferAllocator.reset(renderContext._device);
+	vkDestroyFence(renderContext._device, transferFence, nullptr);
+
+	std::vector<VkDescriptorImageInfo> infos;
+	infos.reserve(_maxTextureCount);
+	int j = 0;
+	for(auto& v : _views)
+	{
+		VkDescriptorImageInfo i;
+		i.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		i.imageView = v;
+
+		infos.push_back(i);
+		j++;
+	}
+	for(unsigned int i = j; i< _maxTextureCount; i++)
+	{
+		infos.push_back(infos.back());
+	}
+
+	_textureDescriptorSetAllocator.resetPools(renderContext._device);
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, infos.data(), nullptr, infos.size())
+		.createDescriptorSet(renderContext._device, &_textureDescriptorSet, &textureLayout, _textureDescriptorSetAllocator);
+
+	return _textures.size();
+}
+
+void Raytracer::drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID)
+{
+	_drawDataTransferCache.push_back({ transform, mesh.material , objectID });
 	VkDrawIndexedIndirectCommand command;
 	command.vertexOffset = mesh.vertexOffset;
 	command.instanceCount = 1;
@@ -159,31 +238,28 @@ void Raytracer::update()
 		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, camerabufferInfo)
 		.createDescriptorSet(renderContext._device, &level0DescriptorSet, &level0Layout, *currentOffsceenDescriptorSetAllocator);
 
-	VkDescriptorImageInfo albedoInfo;
+	VkDescriptorImageInfo albedoInfo = {};
 	albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	albedoInfo.imageView = _albedoTextureView;
-	albedoInfo.sampler = _albedoSampler;
+	albedoInfo.sampler = _gBufferShader.getSamplers()[0];
 
-	VkDescriptorImageInfo metallicInfo;
+	VkDescriptorImageInfo metallicInfo = {};
 	metallicInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	metallicInfo.imageView = _metallicTextureView;
-	metallicInfo.sampler = _metallicSampler;
+	metallicInfo.sampler = _gBufferShader.getSamplers()[1];
 
-	VkDescriptorImageInfo normalInfo;
+	VkDescriptorImageInfo normalInfo = {};
 	normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	normalInfo.imageView = _normalTextureView;
-	normalInfo.sampler = _normalSampler;
+	normalInfo.sampler = _gBufferShader.getSamplers()[2];
 
-	VkDescriptorImageInfo roughnessInfo;
+	VkDescriptorImageInfo roughnessInfo = {};
 	roughnessInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	roughnessInfo.imageView = _roughnessTextureView;
-	roughnessInfo.sampler = _roughnessSampler;
+	roughnessInfo.sampler = _gBufferShader.getSamplers()[3];
+	
 
 	VGM::DescriptorSetBuilder::begin()
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, albedoInfo, nullptr)
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, metallicInfo, nullptr)
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, normalInfo, nullptr)
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, roughnessInfo, nullptr)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &albedoInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &metallicInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &normalInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &roughnessInfo, nullptr, 1)
 		.createDescriptorSet(renderContext._device, &level1DescriptorSet, &level1Layout, *currentOffsceenDescriptorSetAllocator);
 
 	VkDescriptorBufferInfo drawDataInstanceInfo;
@@ -195,7 +271,7 @@ void Raytracer::update()
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawDataInstanceInfo)
 		.createDescriptorSet(renderContext._device, &level2DescriptorSet, &level2Layout, *currentOffsceenDescriptorSetAllocator);
 
-	VkDescriptorSet descriptorSets[] = { level0DescriptorSet, level1DescriptorSet, level2DescriptorSet };
+	VkDescriptorSet descriptorSets[] = { level0DescriptorSet, level1DescriptorSet, level2DescriptorSet, _textureDescriptorSet };
 
 	currentGBuffer->albedoBuffer.cmdPrepareTextureForFragmentShaderWrite(offscreenCmd->get());
 	currentGBuffer->idBuffer.cmdPrepareTextureForFragmentShaderWrite(offscreenCmd->get());
@@ -206,7 +282,7 @@ void Raytracer::update()
 	
 	//drawCommandHere
 	_gBufferShader.cmdBind(offscreenCmd->get());
-	vkCmdBindDescriptorSets(offscreenCmd->get(), VK_PIPELINE_BIND_POINT_GRAPHICS, _gBufferPipelineLayout, 0, 3, descriptorSets, 0, nullptr);
+	vkCmdBindDescriptorSets(offscreenCmd->get(), VK_PIPELINE_BIND_POINT_GRAPHICS, _gBufferPipelineLayout, 0, 4, descriptorSets, 0, nullptr);
 	//vkCmdDraw(offscreenCmd->get(), 3, 1, 0, 0);
 
 	vkCmdBindIndexBuffer(offscreenCmd->get(), _meshBuffer.indices.get(), 0, VK_INDEX_TYPE_UINT32);
@@ -238,12 +314,12 @@ void Raytracer::update()
 	VkDescriptorImageInfo positionInfo;
 	positionInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	positionInfo.imageView = currentGBuffer->positionView;
-	positionInfo.sampler = _gBufferPositionSampler;
+	positionInfo.sampler = _defferedShader.getSamplers()[0];
 	VGM::DescriptorSetBuilder::begin()
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, positionInfo, nullptr)
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, positionInfo, nullptr)
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, positionInfo, nullptr)
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, positionInfo, nullptr)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
 		.createDescriptorSet(renderContext._device, &defferedDescriptorSet, &_defferedLayout, *currentDefferedDescriptorSetAllocator);
 
 	renderContext.cmdPrepareSwapchainImageForRendering(defferedCmd->get());
@@ -281,56 +357,14 @@ void Raytracer::initPresentFramebuffers()
 
 void Raytracer::initMeshBuffer()
 {
-	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 1000000 * 3 * sizeof(Vertex), renderContext._gpuAllocator);
-	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 1000000 * sizeof(uint32_t), renderContext._gpuAllocator);
+	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, _maxTriangleCount * 3 * sizeof(Vertex), renderContext._gpuAllocator);
+	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, _maxTriangleCount * sizeof(uint32_t), renderContext._gpuAllocator);
 }
 
 void Raytracer::initTextureArrays()
 {
-	VkExtent3D textureDimensions = { 1024, 1024, 1 };
-
-	_albedoTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
-		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
-	_albedoTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_albedoTextureView);
-
-	_metallicTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
-		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
-	_metallicTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_metallicTextureView);
-
-	_normalTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
-		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
-	_normalTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_normalTextureView);
-
-	_roughnessTextureArray = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D,
-		VK_IMAGE_USAGE_SAMPLED_BIT, textureDimensions, 100, 3, renderContext._gpuAllocator);
-	_roughnessTextureArray.createImageView(0, 3, 0, 100, renderContext._device, &_roughnessTextureView);
-
-	VkSamplerCreateInfo createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	createInfo.pNext = nullptr;
-	createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	createInfo.anisotropyEnable = VK_FALSE;
-	createInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-	createInfo.compareEnable = VK_FALSE;
-	createInfo.flags = 0;
-	createInfo.minFilter = VK_FILTER_LINEAR;
-	createInfo.magFilter = VK_FILTER_LINEAR;
-	createInfo.maxAnisotropy = 8.0f;
-	createInfo.maxLod = 3;
-	createInfo.minLod = 0;
-	createInfo.mipLodBias = 0;
-	createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	createInfo.unnormalizedCoordinates = VK_FALSE;
-
-	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_albedoSampler);
-	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_metallicSampler);
-	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_normalSampler);
-	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_roughnessSampler);
-
-	createInfo.maxLod = 0;
-	vkCreateSampler(renderContext._device, &createInfo, nullptr, &_gBufferPositionSampler);
+	_textures.reserve(_maxTextureCount);
+	_views.reserve(_maxTextureCount);
 }
 
 void Raytracer::initgBuffers()
@@ -374,6 +408,8 @@ void Raytracer::initDescriptorSetAllocator()
 	{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
 	{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
 	{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10},
+	{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, _maxTextureCount},
+	{VK_DESCRIPTOR_TYPE_SAMPLER, 10}
 	};
 	
 	_offsecreenDescriptorSetAllocators.resize(_concurrencyCount);
@@ -386,44 +422,50 @@ void Raytracer::initDescriptorSetAllocator()
 	{
 		d = VGM::DescriptorSetAllocator(poolSizes, 100, 0, 10, renderContext._device);
 	}
+
+	_textureDescriptorSetAllocator = VGM::DescriptorSetAllocator(poolSizes, 100, 0, 10, renderContext._device);
 }
 
 void Raytracer::initgBufferDescriptorSets()
 {
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.createDescriptorSetLayout(renderContext._device, &level0Layout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.createDescriptorSetLayout(renderContext._device, &level1Layout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.createDescriptorSetLayout(renderContext._device, &level2Layout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.createDescriptorSetLayout(renderContext._device, &_defferedLayout);
+
+	VGM::DescriptorSetLayoutBuilder::begin()
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, _maxTextureCount)
+		.createDescriptorSetLayout(renderContext._device, &textureLayout);
 }
 
 void Raytracer::initGBufferShader()
 {
-	VkDescriptorSetLayout setLayouts[] = { level0Layout, level1Layout, level2Layout };
+	VkDescriptorSetLayout setLayouts[] = { level0Layout, level1Layout, level2Layout, textureLayout};
 
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	createInfo.pNext = nullptr;
 	createInfo.flags = 0;
 	createInfo.pushConstantRangeCount = 0;
-	createInfo.setLayoutCount = 3;
+	createInfo.setLayoutCount = 4;
 	createInfo.pSetLayouts = setLayouts;
 
 	vkCreatePipelineLayout(renderContext._device, &createInfo, nullptr, &_gBufferPipelineLayout);
@@ -456,7 +498,7 @@ void Raytracer::initGBufferShader()
 	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //bitangant
 	configurator.addVertexInputInputBindingDescription(0, 14 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
 
-	_gBufferShader = VGM::ShaderProgram(sources, _gBufferPipelineLayout, configurator, renderContext._device);
+	_gBufferShader = VGM::ShaderProgram(sources, _gBufferPipelineLayout, configurator, renderContext._device, 4);
 }
 
 void Raytracer::initDefferedShader()
@@ -494,7 +536,7 @@ void Raytracer::initDefferedShader()
 	configurator.setBackfaceCulling(VK_CULL_MODE_NONE);
 	configurator.setColorBlendingState(colorBlendAttachments);
 
-	_defferedShader = VGM::ShaderProgram(sources, _defferedPipelineLayout, configurator, renderContext._device);
+	_defferedShader = VGM::ShaderProgram(sources, _defferedPipelineLayout, configurator, renderContext._device, 1);
 }
 
 void Raytracer::initCommandBuffers()
