@@ -11,6 +11,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 add_library(${PROJECT_NAME}
 Raytracer.h
 Raytracer.cpp
+TLAS.h
+TLAS.cpp
+BLAS.h
+BLAS.cpp
 )
 
 #add includes

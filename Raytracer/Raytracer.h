@@ -115,6 +115,10 @@ private:
 	void initPresentFramebuffers();
 	void initTextureArrays();
 
+	void initRaytracingFunctionPointers();
+
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
+
 	VGM::VulkanContext renderContext;
 	uint32_t windowWidth;
 	uint32_t windowHeight;

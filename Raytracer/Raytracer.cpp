@@ -11,10 +11,15 @@ void Raytracer::init(SDL_Window* window)
 
 	_concurrencyCount = 3;
 
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
+
 	VkPhysicalDeviceVulkan13Features features13 = {};
 	features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-	features13.pNext = nullptr;
+	features13.pNext = &accelFeature;
 	features13.dynamicRendering = true;
+
+	accelFeature.pNext = &rtPipelineFeature;
 
 	VkPhysicalDeviceFeatures features = {};
 	features.multiDrawIndirect = true;
@@ -22,8 +27,16 @@ void Raytracer::init(SDL_Window* window)
 	renderContext = VGM::VulkanContext(window, 1, 3, 0,
 		{},
 		{ "VK_LAYER_KHRONOS_validation" },
-		{ VK_KHR_SWAPCHAIN_EXTENSION_NAME }, &features13, _concurrencyCount, features);
+		{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 
+		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME}, 
+		&features13, _concurrencyCount, features);
 
+	VkPhysicalDeviceProperties2 properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+	_raytracingProperties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
+	properties.pNext = &_raytracingProperties;
+	vkGetPhysicalDeviceProperties2(renderContext._physicalDevice, &properties);
 	
 	initDescriptorSetAllocator();
 	initgBufferDescriptorSets();
@@ -365,6 +378,10 @@ void Raytracer::initTextureArrays()
 {
 	_textures.reserve(_maxTextureCount);
 	_views.reserve(_maxTextureCount);
+}
+
+void Raytracer::initRaytracingFunctionPointers()
+{
 }
 
 void Raytracer::initgBuffers()
