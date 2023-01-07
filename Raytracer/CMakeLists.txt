@@ -15,6 +15,8 @@ TLAS.h
 TLAS.cpp
 BLAS.h
 BLAS.cpp
+RaytracingShader.h
+RaytracingShader.cpp
 )
 
 #add includes

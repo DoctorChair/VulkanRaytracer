@@ -14,6 +14,8 @@
 #include "glm/glm.hpp"
 
 #include "Vertex.h"
+#include "BLAS.h"
+#include "TLAS.h"
 
 struct GBuffer
 {
@@ -37,6 +39,12 @@ struct MeshBuffer
 	VGM::Buffer indices;
 };
 
+struct AccelerationStructure
+{
+	std::vector<BLAS> bottomLevelAccelStructures;
+	TLAS topLevelAccelStructure;
+};
+
 struct Material
 {
 	uint32_t albedoIndex;
@@ -52,6 +60,12 @@ struct Mesh
 	uint32_t indicesCount;
 	uint32_t vertexCount;
 	Material material;
+};
+
+struct Instance
+{
+	uint32_t blasIndex;
+	uint32_t meshIndex;
 };
 
 struct DrawData
@@ -131,8 +145,12 @@ private:
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;
+	
+	std::vector<Mesh> _loadedMeshes;
+	std::vector<Instance> _activeInstances;
 
 	MeshBuffer _meshBuffer;
+	AccelerationStructure _accelerationStructure;
 
 	VGM::ShaderProgram _gBufferShader;
 	VkPipelineLayout _gBufferPipelineLayout;
@@ -147,7 +165,6 @@ private:
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
 	VkDescriptorSet _textureDescriptorSet;
 	std::vector<VGM::DescriptorSetAllocator> _defferedDescriptorSetAllocators;
-
 
 	uint32_t _currentFrameIndex = 0;
 

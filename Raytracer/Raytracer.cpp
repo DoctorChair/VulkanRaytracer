@@ -1,6 +1,6 @@
 #include "Raytracer.h"
 #include "Extensions.h"
-#include "BLAS.h"
+
 
 void Raytracer::init(SDL_Window* window)
 {
@@ -74,12 +74,6 @@ void Raytracer::init(SDL_Window* window)
 	initPresentFramebuffers();
 	initMeshBuffer();
 	initTextureArrays();
-
-	VkDeviceAddress meshAddress = _meshBuffer.vertices.getDeviceAddress(_vulkan._device);
-	VkDeviceAddress indexAddress = _meshBuffer.indices.getDeviceAddress(_vulkan._device);
-
-	BLAS blas(meshAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float)*3, VK_INDEX_TYPE_UINT32, 9, 0, 9, 0,
-		_vulkan._device, _vulkan._meshAllocator, _transferCommandBuffer.get());
 }
 
 Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
@@ -117,10 +111,24 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
 	_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
 	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, 99999999);
-	_transferCommandBufferAllocator.reset(_vulkan._device);
+	vkResetFences(_vulkan._device, 1, &transferFence);
+
+	VkDeviceAddress vertexAddress = _meshBuffer.vertices.getDeviceAddress(_vulkan._device);
+	VkDeviceAddress indexAddress = _meshBuffer.indices.getDeviceAddress(_vulkan._device);
+
+	_transferCommandBuffer.begin(nullptr, 0, _vulkan._device);
+
+	_accelerationStructure.bottomLevelAccelStructures.emplace_back(BLAS(vertexAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float),
+		VK_INDEX_TYPE_UINT32, mesh.vertexCount - 1, mesh.vertexOffset, mesh.indicesCount, mesh.indexOffset,
+		_vulkan._device, _vulkan._meshAllocator, _transferCommandBuffer.get()));
+
+	_transferCommandBuffer.end();
+	_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
+	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, 99999999);
+	vkResetFences(_vulkan._device, 1, &transferFence);
+
 	vkDestroyFence(_vulkan._device, transferFence, nullptr);
 	
-
 	return mesh;
 }
 
@@ -402,8 +410,10 @@ void Raytracer::initPresentFramebuffers()
 
 void Raytracer::initMeshBuffer()
 {
-	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, _maxTriangleCount * 3 * sizeof(Vertex), _vulkan._meshAllocator);
-	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, _maxTriangleCount * sizeof(uint32_t), _vulkan._meshAllocator);
+	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT 
+		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, _maxTriangleCount * 3 * sizeof(Vertex), _vulkan._meshAllocator);
+	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT 
+		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, _maxTriangleCount * sizeof(uint32_t), _vulkan._meshAllocator);
 }
 
 void Raytracer::initTextureArrays()
