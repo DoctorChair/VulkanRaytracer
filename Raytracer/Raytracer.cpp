@@ -13,28 +13,37 @@ void Raytracer::init(SDL_Window* window)
 
 	_concurrencyCount = 3;
 
-	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
-	accelFeature.accelerationStructure = VK_TRUE;
-	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
-	rtPipelineFeature.rayTracingPipeline = VK_TRUE;
-	accelFeature.pNext = &rtPipelineFeature;
+	VkPhysicalDeviceVulkan13Features features11 = {};
+	features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+
+	VkPhysicalDeviceVulkan13Features features12 = {};
+	features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 
 	VkPhysicalDeviceVulkan13Features features13 = {};
 	features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-	features13.pNext = &accelFeature;
 	features13.dynamicRendering = VK_TRUE;
-
+	
 	VkPhysicalDeviceBufferDeviceAddressFeatures addressFeatures = {};
 	addressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-	addressFeatures.pNext = &features13;
 	addressFeatures.bufferDeviceAddress = VK_TRUE;
-	
+
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature = {};
+	accelFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+	accelFeature.accelerationStructure = VK_TRUE;
+
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{};
+	rtPipelineFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+	rtPipelineFeature.rayTracingPipeline = VK_TRUE;
 
 	VkPhysicalDeviceFeatures2 features2 = {};
 	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-	features2.pNext = &addressFeatures;
 	features2.features.multiDrawIndirect = VK_TRUE;
 	features2.features.samplerAnisotropy = VK_TRUE;
+
+	features2.pNext = &features13;
+	features13.pNext = &addressFeatures;
+	addressFeatures.pNext = &accelFeature;
+	accelFeature.pNext = &rtPipelineFeature;
 
 	_vulkan = VGM::VulkanContext(window, 1, 3, 0,
 		{},
@@ -69,7 +78,7 @@ void Raytracer::init(SDL_Window* window)
 	VkDeviceAddress meshAddress = _meshBuffer.vertices.getDeviceAddress(_vulkan._device);
 	VkDeviceAddress indexAddress = _meshBuffer.indices.getDeviceAddress(_vulkan._device);
 
-	BLAS blas(meshAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, sizeof(Vertex), VK_INDEX_TYPE_UINT32, 100, 0, 9, 0,
+	BLAS blas(meshAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float)*3, VK_INDEX_TYPE_UINT32, 9, 0, 9, 0,
 		_vulkan._device, _vulkan._meshAllocator, _transferCommandBuffer.get());
 }
 

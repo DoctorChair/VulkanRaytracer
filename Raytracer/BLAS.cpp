@@ -22,23 +22,22 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 	geo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
 	geo.geometry.triangles = tris;
 
-	VkAccelerationStructureBuildRangeInfoKHR range;
+	VkAccelerationStructureBuildRangeInfoKHR range = {};
 	range.firstVertex = VertexOffset;
 	range.primitiveCount = IndicesCount / 3;
 	range.primitiveOffset = IndicesOffeset;
 	range.transformOffset = 0;
 
-	VkAccelerationStructureBuildGeometryInfoKHR build;
+	VkAccelerationStructureBuildGeometryInfoKHR build = {};
 	build.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	build.pNext = nullptr;
 	build.geometryCount = 1;
 	build.pGeometries = &geo;
 	build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	build.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-	build.flags = 0;
-	build.srcAccelerationStructure = VK_NULL_HANDLE;
+	build.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
 
-	VkAccelerationStructureBuildSizesInfoKHR buildSize;
+	VkAccelerationStructureBuildSizesInfoKHR buildSize = {};
 	buildSize.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 	buildSize.pNext = nullptr;
 	
