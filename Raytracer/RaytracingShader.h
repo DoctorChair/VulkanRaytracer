@@ -9,7 +9,7 @@ class RaytracingShader
 {
 public:
 	RaytracingShader() = default;
-	RaytracingShader(VkPipelineLayout, std::vector<std::pair<std::string, VkShaderStageFlagBits>> shaderSources, VkPipelineLayout layout, VkDevice device, uint32_t maxRecoursionDepth);
+	RaytracingShader(std::vector<std::pair<std::string, VkShaderStageFlagBits>>& shaderSources, VkPipelineLayout layout, VkDevice device, uint32_t maxRecoursionDepth);
 
 private:
 	VkPipeline _raytracingPipeline;

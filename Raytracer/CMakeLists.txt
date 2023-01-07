@@ -17,6 +17,8 @@ BLAS.h
 BLAS.cpp
 RaytracingShader.h
 RaytracingShader.cpp
+ShaderBindingTable.h
+ShaderBindingTable.cpp
 )
 
 #add includes

@@ -12,15 +12,15 @@ layout (location = 1) out vec2 texCoords;
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 viewMatrix;
-	mat4 projectionMatrix;
-	mat4 cameraMatrix;
+	mat4 inverseviewMatrix;
+    mat4 projectionMatrix;
+    mat4 inverseProjectionMatrix;
 	vec3 cameraPosition;
 } cameraData;
 
 layout(set = 0, binding = 1) uniform  RenderBuffer{
 	float fog;
 } globalDrawData;
-
 
 struct Material
 {

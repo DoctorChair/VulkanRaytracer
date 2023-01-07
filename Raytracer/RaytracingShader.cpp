@@ -1,7 +1,8 @@
 #include "RaytracingShader.h"
 #include "Utils.h"
+#include <stdexcept>
 
-RaytracingShader::RaytracingShader(VkPipelineLayout, std::vector<std::pair<std::string, VkShaderStageFlagBits>> shaderSources, VkPipelineLayout layout, VkDevice device, uint32_t maxRecoursionDepth)
+RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderStageFlagBits>>& shaderSources, VkPipelineLayout layout, VkDevice device, uint32_t maxRecoursionDepth)
 {
 	
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
@@ -10,9 +11,12 @@ RaytracingShader::RaytracingShader(VkPipelineLayout, std::vector<std::pair<std::
 	for(auto& s : shaderSources)
 	{
 		VkShaderModule module;
-		VGM::createShaderModule(s.first, module, device);
+		if(VGM::createShaderModule(s.first, module, device)!=VK_SUCCESS)
+			throw std::runtime_error("Failed to shader Module!");
+
 		VkPipelineShaderStageCreateInfo stage = {};
 		stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		stage.stage = s.second;
 		stage.pNext = nullptr;
 		stage.module = module;
 		stage.pName = "main";
@@ -36,7 +40,7 @@ RaytracingShader::RaytracingShader(VkPipelineLayout, std::vector<std::pair<std::
 		if(s.second == VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR)
 		{
 			group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
-			group.generalShader = shaderStages.size() - 1;
+			group.closestHitShader = shaderStages.size() - 1;
 		}
 		if(s.second == VK_SHADER_STAGE_MISS_BIT_KHR)
 		{
@@ -50,13 +54,11 @@ RaytracingShader::RaytracingShader(VkPipelineLayout, std::vector<std::pair<std::
 	VkRayTracingPipelineCreateInfoKHR createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
 	createInfo.pNext = nullptr;
-	createInfo.basePipelineHandle = 0;
-	createInfo.basePipelineIndex = 0;
 	createInfo.flags = 0;
-	createInfo.groupCount = shaderGroups.size();
-	createInfo.pGroups = shaderGroups.data();
 	createInfo.layout = layout;
 	createInfo.maxPipelineRayRecursionDepth = maxRecoursionDepth;
+	createInfo.groupCount = shaderGroups.size();
+	createInfo.pGroups = shaderGroups.data();
 	createInfo.stageCount = shaderStages.size();
 	createInfo.pStages = shaderStages.data();
 

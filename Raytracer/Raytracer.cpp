@@ -1,6 +1,6 @@
 #include "Raytracer.h"
 #include "Extensions.h"
-
+#include "Utils.h"
 
 void Raytracer::init(SDL_Window* window)
 {
@@ -63,9 +63,10 @@ void Raytracer::init(SDL_Window* window)
 	vkGetPhysicalDeviceProperties2(_vulkan._physicalDevice, &properties);
 	
 	initDescriptorSetAllocator();
-	initgBufferDescriptorSets();
+	initDescriptorSets();
 	initGBufferShader();
 	initDefferedShader();
+	initRaytraceShader();
 	initSyncStructures();
 	initCommandBuffers();
 	initDataBuffers();
@@ -118,7 +119,7 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 
 	_transferCommandBuffer.begin(nullptr, 0, _vulkan._device);
 
-	_accelerationStructure.bottomLevelAccelStructures.emplace_back(BLAS(vertexAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float),
+	_accelerationStructure.bottomLevelAccelStructures.emplace_back(BLAS(vertexAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(Vertex),
 		VK_INDEX_TYPE_UINT32, mesh.vertexCount - 1, mesh.vertexOffset, mesh.indicesCount, mesh.indexOffset,
 		_vulkan._device, _vulkan._meshAllocator, _transferCommandBuffer.get()));
 
@@ -246,7 +247,7 @@ void Raytracer::update()
 	VGM::DescriptorSetAllocator* currentOffsceenDescriptorSetAllocator = &_offsecreenDescriptorSetAllocators[_currentFrameIndex];
 	VGM::DescriptorSetAllocator* currentDefferedDescriptorSetAllocator = &_defferedDescriptorSetAllocators[_currentFrameIndex];
 
-	VkDescriptorSet level0DescriptorSet;
+	VkDescriptorSet globalDescriptorSet;
 	VkDescriptorSet level1DescriptorSet;
 	VkDescriptorSet level2DescriptorSet;
 
@@ -287,9 +288,9 @@ void Raytracer::update()
 	camerabufferInfo.range = currentCameraBuffer->size();
 
 	VGM::DescriptorSetBuilder::begin()
-		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, camerabufferInfo)
-		.createDescriptorSet(_vulkan._device, &level0DescriptorSet, &level0Layout, *currentOffsceenDescriptorSetAllocator);
+		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo)
+		.createDescriptorSet(_vulkan._device, &globalDescriptorSet, &globalLayout, *currentOffsceenDescriptorSetAllocator);
 
 	VkDescriptorImageInfo albedoInfo = {};
 	albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -324,7 +325,7 @@ void Raytracer::update()
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawDataInstanceInfo)
 		.createDescriptorSet(_vulkan._device, &level2DescriptorSet, &level2Layout, *currentOffsceenDescriptorSetAllocator);
 
-	VkDescriptorSet descriptorSets[] = { level0DescriptorSet, level1DescriptorSet, level2DescriptorSet, _textureDescriptorSet };
+	VkDescriptorSet descriptorSets[] = { globalDescriptorSet, level1DescriptorSet, level2DescriptorSet, _textureDescriptorSet };
 
 	currentGBuffer->albedoBuffer.cmdPrepareTextureForFragmentShaderWrite(offscreenCmd->get());
 	currentGBuffer->idBuffer.cmdPrepareTextureForFragmentShaderWrite(offscreenCmd->get());
@@ -422,10 +423,6 @@ void Raytracer::initTextureArrays()
 	_views.reserve(_maxTextureCount);
 }
 
-void Raytracer::initRaytracingFunctionPointers()
-{
-}
-
 void Raytracer::initgBuffers()
 {
 	_gBufferChain.resize(_concurrencyCount);
@@ -485,12 +482,12 @@ void Raytracer::initDescriptorSetAllocator()
 	_textureDescriptorSetAllocator = VGM::DescriptorSetAllocator(poolSizes, 100, 0, 10, _vulkan._device);
 }
 
-void Raytracer::initgBufferDescriptorSets()
+void Raytracer::initDescriptorSets()
 {
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.createDescriptorSetLayout(_vulkan._device, &level0Layout);
+		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.createDescriptorSetLayout(_vulkan._device, &globalLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
@@ -513,11 +510,22 @@ void Raytracer::initgBufferDescriptorSets()
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, _maxTextureCount)
 		.createDescriptorSetLayout(_vulkan._device, &textureLayout);
+
+	VGM::DescriptorSetLayoutBuilder::begin()
+		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout1);
+
+	VGM::DescriptorSetLayoutBuilder::begin()
+		.addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout2);
 }
 
 void Raytracer::initGBufferShader()
 {
-	VkDescriptorSetLayout setLayouts[] = { level0Layout, level1Layout, level2Layout, textureLayout};
+	VkDescriptorSetLayout setLayouts[] = { globalLayout, level1Layout, level2Layout, textureLayout};
 
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -596,6 +604,28 @@ void Raytracer::initDefferedShader()
 	configurator.setColorBlendingState(colorBlendAttachments);
 
 	_defferedShader = VGM::ShaderProgram(sources, _defferedPipelineLayout, configurator, _vulkan._device, 1);
+}
+
+void Raytracer::initRaytraceShader()
+{
+	VkDescriptorSetLayout layouts[] = { globalLayout ,_raytracerLayout1, _raytracerLayout2 };
+
+	std::vector<std::pair<std::string, VkShaderStageFlagBits>> sources = {
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRGEN.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRCHIT.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR} };
+
+	VkPipelineLayoutCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	createInfo.pNext = nullptr;
+	createInfo.flags = 0;
+	createInfo.pushConstantRangeCount = 0;
+	createInfo.setLayoutCount = 3;
+	createInfo.pSetLayouts = layouts;
+
+	vkCreatePipelineLayout(_vulkan._device, &createInfo, nullptr, &_raytracePipelineLayout);
+	
+	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, 1);
 }
 
 void Raytracer::initCommandBuffers()

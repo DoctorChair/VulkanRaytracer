@@ -14,8 +14,10 @@
 #include "glm/glm.hpp"
 
 #include "Vertex.h"
+
 #include "BLAS.h"
 #include "TLAS.h"
+#include "RaytracingShader.h"
 
 struct GBuffer
 {
@@ -36,6 +38,7 @@ struct GBuffer
 struct MeshBuffer
 {
 	VGM::Buffer vertices;
+
 	VGM::Buffer indices;
 };
 
@@ -88,8 +91,9 @@ struct globalRenderData
 struct CameraData
 {
 	glm::mat4 viewMatrix;
+	glm::mat4 inverseviewMatrix;
 	glm::mat4 projectionMatrix;
-	glm::mat4 cameraMatrix;
+	glm::mat4 inverseProjectionMatrix;
 	glm::vec3 cameraPosition;
 };
 
@@ -117,9 +121,10 @@ public:
 
 private:
 	void initDescriptorSetAllocator();
-	void initgBufferDescriptorSets();
+	void initDescriptorSets();
 	void initGBufferShader();
 	void initDefferedShader();
+	void initRaytraceShader();
 	void initCommandBuffers();
 	void initSyncStructures();
 	void initDataBuffers();
@@ -128,8 +133,6 @@ private:
 	void initgBuffers();
 	void initPresentFramebuffers();
 	void initTextureArrays();
-
-	void initRaytracingFunctionPointers();
 
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
@@ -160,6 +163,9 @@ private:
 	VkPipelineLayout _defferedPipelineLayout;
 	std::vector<VGM::Framebuffer> _presentFramebuffers;
 
+	RaytracingShader _raytraceShader;
+	VkPipelineLayout _raytracePipelineLayout;
+
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 	std::vector<VGM::DescriptorSetAllocator> _offsecreenDescriptorSetAllocators;
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
@@ -185,10 +191,14 @@ private:
 	std::vector<VkDrawIndexedIndirectCommand> _drawCommandTransferCache;
 	std::vector<DrawData> _drawDataTransferCache;
 
-	VkDescriptorSetLayout level0Layout;
+	VkDescriptorSetLayout globalLayout;
 	VkDescriptorSetLayout level1Layout;
 	VkDescriptorSetLayout level2Layout;
 	VkDescriptorSetLayout textureLayout;
 
 	VkDescriptorSetLayout _defferedLayout;
+
+	VkDescriptorSetLayout _raytracerLayout1;
+	VkDescriptorSetLayout _raytracerLayout2;
+	
 };
