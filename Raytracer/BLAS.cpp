@@ -35,6 +35,7 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 	build.pGeometries = &geo;
 	build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	build.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+	build.flags = 0;
 	build.srcAccelerationStructure = VK_NULL_HANDLE;
 
 	VkAccelerationStructureBuildSizesInfoKHR buildSize;

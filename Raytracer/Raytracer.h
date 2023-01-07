@@ -119,7 +119,7 @@ private:
 
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
-	VGM::VulkanContext renderContext;
+	VGM::VulkanContext _vulkan;
 	uint32_t windowWidth;
 	uint32_t windowHeight;
 

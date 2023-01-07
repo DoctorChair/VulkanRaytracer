@@ -63,8 +63,7 @@ TLAS::TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBL
 
 	vkCreateAccelerationStructureKHR(device, &createInfo, nullptr, &_tlas);
 
-	_scratchBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-		| VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, size.buildScratchSize, allocator);
+	_scratchBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, size.buildScratchSize, allocator);
 
 	build.scratchData.deviceAddress = _scratchBuffer.getDeviceAddress(device);
 
