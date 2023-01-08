@@ -2,7 +2,7 @@
 #include "Utils.h"
 #include <stdexcept>
 
-RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderStageFlagBits>>& shaderSources, VkPipelineLayout layout, VkDevice device, uint32_t maxRecoursionDepth)
+RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderStageFlagBits>>& shaderSources, VkPipelineLayout layout, VkDevice device, uint32_t maxRecoursionDepth, uint32_t samplerCount)
 {
 	
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
@@ -69,5 +69,66 @@ RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderSt
 	for(auto& s : shaderStages)
 	{
 		vkDestroyShaderModule(device, s.module, nullptr);
+	}
+
+	_samplers.resize(samplerCount);
+
+	createSamplers(device);
+}
+
+VkResult RaytracingShader::getShaderHandles(std::vector<uint8_t>& handles, VkDevice device, uint32_t groupHandleSize, uint32_t handleAlignment)
+{
+	uint32_t alignedGroupHandleSize = groupHandleSize;
+	
+	uint32_t r = groupHandleSize % handleAlignment;
+	if (r > 0)
+	{
+		alignedGroupHandleSize = alignedGroupHandleSize + (handleAlignment - r);
+	}
+
+	handles.resize(alignedGroupHandleSize * _shaderGroupCount);
+
+	return vkGetRayTracingShaderGroupHandlesKHR(device, _raytracingPipeline, 0, _shaderGroupCount, alignedGroupHandleSize * _shaderGroupCount, handles.data());
+}
+
+uint32_t RaytracingShader::shaderGroupCount()
+{
+	return _shaderGroupCount;
+}
+
+std::vector<VkSampler>& RaytracingShader::getSampelers()
+{
+	return _samplers;
+}
+
+void RaytracingShader::destroy(VkDevice device)
+{
+	vkDestroyPipeline(device, _raytracingPipeline, nullptr);
+}
+
+void RaytracingShader::createSamplers(VkDevice device)
+{
+	VkSamplerCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	createInfo.pNext = nullptr;
+	createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	createInfo.anisotropyEnable = VK_FALSE;
+	createInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+	createInfo.compareEnable = VK_FALSE;
+	createInfo.flags = 0;
+	createInfo.minFilter = VK_FILTER_LINEAR;
+	createInfo.magFilter = VK_FILTER_LINEAR;
+	createInfo.maxAnisotropy = 8.0f;
+	createInfo.maxLod = 100.0f;
+	createInfo.minLod = 0;
+	createInfo.mipLodBias = 0;
+	createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	createInfo.unnormalizedCoordinates = VK_FALSE;
+
+	for (auto& s : _samplers)
+	{
+		vkCreateSampler(device, &createInfo, nullptr, &s);
 	}
 }

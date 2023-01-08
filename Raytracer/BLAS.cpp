@@ -68,3 +68,10 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 
 	vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &build, &pRangeInfo);
 }
+
+void BLAS::destroy(VkDevice device, VmaAllocator allocator)
+{
+	_blasBuffer.destroy(allocator);
+	_scratchBuffer.destroy(allocator);
+	vkDestroyAccelerationStructureKHR(device, _blas, nullptr);
+}

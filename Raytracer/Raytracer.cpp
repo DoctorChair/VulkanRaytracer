@@ -63,10 +63,11 @@ void Raytracer::init(SDL_Window* window)
 	vkGetPhysicalDeviceProperties2(_vulkan._physicalDevice, &properties);
 	
 	initDescriptorSetAllocator();
-	initDescriptorSets();
+	initDescriptorSetLayouts();
 	initGBufferShader();
 	initDefferedShader();
 	initRaytraceShader();
+	initShaderBindingTable();
 	initSyncStructures();
 	initCommandBuffers();
 	initDataBuffers();
@@ -256,10 +257,9 @@ void Raytracer::update()
 	renderArea.offset = { 0, 0 };
 
 	//upload transfer data here
-	uint32_t swapchainIndex = _vulkan.aquireNextImageIndex(nullptr, presentSemaphore);
 
 	//OffscreenRenderPass
-	VGM::Framebuffer* currentPresentFramebuffer = &_presentFramebuffers[swapchainIndex];
+	VGM::Framebuffer* currentPresentFramebuffer = &_presentFramebuffers[_currentSwapchainIndex];
 
 	offscreenCmd->begin(&offscreenRenderFence, 1, _vulkan._device);
 
@@ -314,7 +314,7 @@ void Raytracer::update()
 		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &metallicInfo, nullptr, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &normalInfo, nullptr, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &roughnessInfo, nullptr, 1)
-		.createDescriptorSet(_vulkan._device, &level1DescriptorSet, &level1Layout, *currentOffsceenDescriptorSetAllocator);
+		.createDescriptorSet(_vulkan._device, &level1DescriptorSet, &gBufferLayout1, *currentOffsceenDescriptorSetAllocator);
 
 	VkDescriptorBufferInfo drawDataInstanceInfo;
 	drawDataInstanceInfo.buffer = currentDrawDataInstanceBuffer->get();
@@ -323,7 +323,7 @@ void Raytracer::update()
 
 	VGM::DescriptorSetBuilder::begin()
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawDataInstanceInfo)
-		.createDescriptorSet(_vulkan._device, &level2DescriptorSet, &level2Layout, *currentOffsceenDescriptorSetAllocator);
+		.createDescriptorSet(_vulkan._device, &level2DescriptorSet, &gBufferLayout1, *currentOffsceenDescriptorSetAllocator);
 
 	VkDescriptorSet descriptorSets[] = { globalDescriptorSet, level1DescriptorSet, level2DescriptorSet, _textureDescriptorSet };
 
@@ -423,6 +423,150 @@ void Raytracer::initTextureArrays()
 	_views.reserve(_maxTextureCount);
 }
 
+void Raytracer::initShaderBindingTable()
+{
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR pipelineProperties = {};
+	pipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+	pipelineProperties.pNext = nullptr;
+	VGM::getPhysicalDeviceProperties2(_vulkan._physicalDevice, &pipelineProperties);
+
+	uint32_t groupAlignment = pipelineProperties.shaderGroupHandleAlignment;
+	uint32_t groupHandleSize = pipelineProperties.shaderGroupHandleSize;
+
+	std::vector<uint8_t> shaderGroupHandels;
+	_raytraceShader.getShaderHandles(shaderGroupHandels, _vulkan._device, groupHandleSize, groupAlignment);
+
+	_shaderBindingTable = ShaderBindingTable(_raytraceShader.shaderGroupCount(), groupHandleSize, groupAlignment, shaderGroupHandels,
+		_vulkan._device, _vulkan._generalPurposeAllocator);
+}
+
+void Raytracer::updateGBufferDescriptorSets()
+{
+	VGM::Buffer* currentGlobalRenderDataBuffer = &_globalRenderDataBuffers[_currentFrameIndex];
+	VGM::Buffer* currentCameraBuffer = &_cameraBuffers[_currentFrameIndex];
+	VGM::Buffer* currentDrawDataInstanceBuffer = &_drawDataIsntanceBuffers[_currentFrameIndex];
+
+	VGM::Buffer* currentDrawIndirectBuffer = &_drawIndirectCommandBuffer[_currentFrameIndex];
+
+	GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
+
+	VGM::DescriptorSetAllocator* currentOffsceenDescriptorSetAllocator = &_offsecreenDescriptorSetAllocators[_currentFrameIndex];
+
+	//OffscreenRenderPass
+	VGM::Framebuffer* currentPresentFramebuffer = &_presentFramebuffers[_currentSwapchainIndex];
+
+	currentOffsceenDescriptorSetAllocator->resetPools(_vulkan._device);
+
+	VkDescriptorBufferInfo globalbufferInfo;
+	globalbufferInfo.buffer = currentGlobalRenderDataBuffer->get();
+	globalbufferInfo.offset = 0;
+	globalbufferInfo.range = currentGlobalRenderDataBuffer->size();
+
+	VkDescriptorBufferInfo camerabufferInfo;
+	camerabufferInfo.buffer = currentCameraBuffer->get();
+	camerabufferInfo.offset = 0;
+	camerabufferInfo.range = currentCameraBuffer->size();
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, camerabufferInfo)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo)
+		.createDescriptorSet(_vulkan._device, &_globalDescriptorSet, &globalLayout, *currentOffsceenDescriptorSetAllocator);
+
+	VkDescriptorImageInfo albedoInfo = {};
+	albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	albedoInfo.sampler = _gBufferShader.getSamplers()[0];
+
+	VkDescriptorImageInfo metallicInfo = {};
+	metallicInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	metallicInfo.sampler = _gBufferShader.getSamplers()[1];
+
+	VkDescriptorImageInfo normalInfo = {};
+	normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	normalInfo.sampler = _gBufferShader.getSamplers()[2];
+
+	VkDescriptorImageInfo roughnessInfo = {};
+	roughnessInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	roughnessInfo.sampler = _gBufferShader.getSamplers()[3];
+
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &albedoInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &metallicInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &normalInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &roughnessInfo, nullptr, 1)
+		.createDescriptorSet(_vulkan._device, &_gBuffer1DescripotrSet, &gBufferLayout1, *currentOffsceenDescriptorSetAllocator);
+
+	VkDescriptorBufferInfo drawDataInstanceInfo;
+	drawDataInstanceInfo.buffer = currentDrawDataInstanceBuffer->get();
+	drawDataInstanceInfo.offset = 0;
+	drawDataInstanceInfo.range = currentDrawDataInstanceBuffer->size();
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawDataInstanceInfo)
+		.createDescriptorSet(_vulkan._device, &_gBuffer2DescriptorSet, &gBufferLayout1, *currentOffsceenDescriptorSetAllocator);
+}
+
+void Raytracer::updateDefferedDescriptorSets()
+{
+	GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
+	DefferedBuffer* currentDefferedBuffer = &_defferdBufferChain[_currentFrameIndex];
+
+	VGM::DescriptorSetAllocator* currentDefferedDescriptorSetAllocator = &_defferedDescriptorSetAllocators[_currentFrameIndex];
+
+	VkDescriptorImageInfo positionInfo;
+	positionInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	positionInfo.imageView = currentGBuffer->positionView;
+	positionInfo.sampler = _defferedShader.getSamplers()[0];
+	VGM::DescriptorSetBuilder::begin()
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1)
+		.createDescriptorSet(_vulkan._device, &_defferedDescriptorSet, &_defferedLayout, *currentDefferedDescriptorSetAllocator);
+}
+
+void Raytracer::updateRaytraceDescripotrSets()
+{
+	GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
+	DefferedBuffer* currentDefferedBuffer = &_defferdBufferChain[_currentFrameIndex];
+	VGM::Framebuffer* currentPresentFramebuffer = &_presentFramebuffers[_currentSwapchainIndex];
+
+	VGM::DescriptorSetAllocator* currentRaytracerDescriptorSetAllocator = &_raytracerDescriptorSetAllocators[_currentFrameIndex];
+
+	VkDescriptorImageInfo colorInfo;
+	
+	VkDescriptorImageInfo normalInfo;
+	
+	VkDescriptorImageInfo depthInfo;
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &colorInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normalInfo, nullptr, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depthInfo, nullptr, 1)
+		.createDescriptorSet(_vulkan._device, &_raytracerDescriptorSet1, &_raytracerLayout1, *currentRaytracerDescriptorSetAllocator);
+
+	VkDescriptorImageInfo ouColorInfo;
+
+	VkWriteDescriptorSetAccelerationStructureKHR accelWrite;
+
+	VGM::DescriptorSetBuilder::begin()
+		.bindAccelerationStructure(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, &accelWrite, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &colorInfo, nullptr, 1)
+		.createDescriptorSet(_vulkan._device, &_raytracerDescriptorSet2, &_raytracerLayout2, *currentRaytracerDescriptorSetAllocator);
+}
+
+void Raytracer::drawOffscreen()
+{
+}
+
+void Raytracer::renderDeffered()
+{
+}
+
+void Raytracer::traceRays()
+{
+}
+
 void Raytracer::initgBuffers()
 {
 	_gBufferChain.resize(_concurrencyCount);
@@ -458,6 +602,21 @@ void Raytracer::initgBuffers()
 	}
 }
 
+void Raytracer::initDefferedBuffers()
+{
+	_defferdBufferChain.resize(_concurrencyCount);
+	for(auto& d : _defferdBufferChain)
+	{
+		d.colorBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
+		d.colorBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &d.colorView);
+
+		VkClearColorValue clear = { 0.0f, 0.0f, 1.0f };
+
+		d.framebuffer.bindColorTextureTarget(d.colorView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
+	}
+}
+
 void Raytracer::initDescriptorSetAllocator()
 {
 	std::vector<VkDescriptorPoolSize> poolSizes = {
@@ -482,7 +641,7 @@ void Raytracer::initDescriptorSetAllocator()
 	_textureDescriptorSetAllocator = VGM::DescriptorSetAllocator(poolSizes, 100, 0, 10, _vulkan._device);
 }
 
-void Raytracer::initDescriptorSets()
+void Raytracer::initDescriptorSetLayouts()
 {
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
@@ -494,11 +653,11 @@ void Raytracer::initDescriptorSets()
 		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.createDescriptorSetLayout(_vulkan._device, &level1Layout);
+		.createDescriptorSetLayout(_vulkan._device, &gBufferLayout1);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.createDescriptorSetLayout(_vulkan._device, &level2Layout);
+		.createDescriptorSetLayout(_vulkan._device, &gBufferLayout1);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
@@ -525,7 +684,7 @@ void Raytracer::initDescriptorSets()
 
 void Raytracer::initGBufferShader()
 {
-	VkDescriptorSetLayout setLayouts[] = { globalLayout, level1Layout, level2Layout, textureLayout};
+	VkDescriptorSetLayout setLayouts[] = { globalLayout, gBufferLayout1, gBufferLayout1, textureLayout};
 
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -625,7 +784,7 @@ void Raytracer::initRaytraceShader()
 
 	vkCreatePipelineLayout(_vulkan._device, &createInfo, nullptr, &_raytracePipelineLayout);
 	
-	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, 1);
+	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, 1, 4);
 }
 
 void Raytracer::initCommandBuffers()

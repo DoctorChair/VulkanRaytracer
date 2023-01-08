@@ -18,6 +18,7 @@
 #include "BLAS.h"
 #include "TLAS.h"
 #include "RaytracingShader.h"
+#include "ShaderBindingTable.h"
 
 struct GBuffer
 {
@@ -35,10 +36,17 @@ struct GBuffer
 	VkImageView depthView;
 };
 
+struct DefferedBuffer
+{
+	VGM::Framebuffer framebuffer;
+
+	VGM::Texture colorBuffer;
+	VkImageView colorView;
+};
+
 struct MeshBuffer
 {
 	VGM::Buffer vertices;
-
 	VGM::Buffer indices;
 };
 
@@ -103,8 +111,10 @@ struct FrameSynchro
 	VkSemaphore _presentSemaphore;
 	VkSemaphore _offsceenRenderSemaphore;
 	VkSemaphore _defferedRenderSemaphore;
+	VkSemaphore _raytraceSemaphore;
 	VkFence _offsrceenRenderFence;
 	VkFence _defferedRenderFence;
+	VkFence _RaytraceFence;
 };
 
 class Raytracer
@@ -121,7 +131,7 @@ public:
 
 private:
 	void initDescriptorSetAllocator();
-	void initDescriptorSets();
+	void initDescriptorSetLayouts();
 	void initGBufferShader();
 	void initDefferedShader();
 	void initRaytraceShader();
@@ -131,8 +141,17 @@ private:
 
 	void initMeshBuffer();
 	void initgBuffers();
+	void initDefferedBuffers();
 	void initPresentFramebuffers();
 	void initTextureArrays();
+	void initShaderBindingTable();
+
+	void updateGBufferDescriptorSets();
+	void updateDefferedDescriptorSets();
+	void updateRaytraceDescripotrSets();
+	void drawOffscreen();
+	void renderDeffered();
+	void traceRays();
 
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
@@ -140,15 +159,15 @@ private:
 	uint32_t windowWidth;
 	uint32_t windowHeight;
 
-	uint32_t _concurrencyCount  = 3;
+	uint32_t _concurrencyCount = 3;
 	uint32_t _maxDrawCount = 1000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 10000000;
-	uint32_t _maxMipMapLevels = 3;
+	uint32_t _maxMipMapLevels = 1;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;
-	
+
 	std::vector<Mesh> _loadedMeshes;
 	std::vector<Instance> _activeInstances;
 
@@ -161,18 +180,18 @@ private:
 
 	VGM::ShaderProgram _defferedShader;
 	VkPipelineLayout _defferedPipelineLayout;
-	std::vector<VGM::Framebuffer> _presentFramebuffers;
+	std::vector<DefferedBuffer> _defferdBufferChain;
 
 	RaytracingShader _raytraceShader;
 	VkPipelineLayout _raytracePipelineLayout;
+	std::vector<VGM::Framebuffer> _presentFramebuffers;
+
+	ShaderBindingTable _shaderBindingTable;
 
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
-	std::vector<VGM::DescriptorSetAllocator> _offsecreenDescriptorSetAllocators;
-	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
-	VkDescriptorSet _textureDescriptorSet;
-	std::vector<VGM::DescriptorSetAllocator> _defferedDescriptorSetAllocators;
 
 	uint32_t _currentFrameIndex = 0;
+	uint32_t _currentSwapchainIndex = 0;
 
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
@@ -180,7 +199,7 @@ private:
 
 	VGM::CommandBufferAllocator _transferCommandBufferAllocator;
 	VGM::CommandBuffer _transferCommandBuffer;
-	
+
 	std::vector<FrameSynchro> _frameSynchroStructs;
 
 	std::vector<VGM::Buffer> _cameraBuffers;
@@ -191,14 +210,32 @@ private:
 	std::vector<VkDrawIndexedIndirectCommand> _drawCommandTransferCache;
 	std::vector<DrawData> _drawDataTransferCache;
 
+	std::vector<VGM::DescriptorSetAllocator> _offsecreenDescriptorSetAllocators;
+	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
+	std::vector<VGM::DescriptorSetAllocator> _defferedDescriptorSetAllocators;
+	std::vector<VGM::DescriptorSetAllocator> _raytracerDescriptorSetAllocators;
+
 	VkDescriptorSetLayout globalLayout;
-	VkDescriptorSetLayout level1Layout;
-	VkDescriptorSetLayout level2Layout;
+	VkDescriptorSetLayout gBufferLayout1;
+
+	VkDescriptorSetLayout gBufferLayout2;
+
 	VkDescriptorSetLayout textureLayout;
 
 	VkDescriptorSetLayout _defferedLayout;
 
 	VkDescriptorSetLayout _raytracerLayout1;
 	VkDescriptorSetLayout _raytracerLayout2;
-	
+
+	VkDescriptorSet _globalDescriptorSet;
+
+	VkDescriptorSet _gBuffer1DescripotrSet;
+	VkDescriptorSet _gBuffer2DescriptorSet;
+
+	VkDescriptorSet _textureDescriptorSet;
+
+	VkDescriptorSet _defferedDescriptorSet;
+
+	VkDescriptorSet _raytracerDescriptorSet1;
+	VkDescriptorSet _raytracerDescriptorSet2;
 };

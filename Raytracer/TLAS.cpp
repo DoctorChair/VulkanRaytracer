@@ -71,3 +71,10 @@ TLAS::TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBL
 
 	vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &build, &pRangeInfo);
 }
+
+void TLAS::destroy(VkDevice device, VmaAllocator allocator)
+{
+	_tlasBuffer.destroy(allocator);
+	_scratchBuffer.destroy(allocator);
+	vkDestroyAccelerationStructureKHR(device, _tlas, nullptr);
+}
