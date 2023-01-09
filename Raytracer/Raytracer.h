@@ -174,6 +174,7 @@ private:
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 10000000;
 	uint32_t _maxMipMapLevels = 1;
+	uint64_t _timeout = 1000000000;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;

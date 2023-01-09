@@ -77,7 +77,7 @@ void Raytracer::init(SDL_Window* window)
 	initPresentFramebuffers();
 	initMeshBuffer();
 	initTextureArrays();
-	//initTLAS();
+	initTLAS();
 }
 
 Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
@@ -114,10 +114,8 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 	_transferCommandBuffer.end();
 	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
 	_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
-	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, 99999999);
+	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
 	vkResetFences(_vulkan._device, 1, &transferFence);
-
-
 
 	VkDeviceAddress vertexAddress = _meshBuffer.vertices.getDeviceAddress(_vulkan._device);
 	VkDeviceAddress indexAddress = _meshBuffer.indices.getDeviceAddress(_vulkan._device);
@@ -130,11 +128,10 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 
 	_raytraceBuildCommandBuffer.end();
 	_raytraceBuildCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._computeQueue);
-	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, 99999999);
+	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
 	vkResetFences(_vulkan._device, 1, &transferFence);
 
 	vkDestroyFence(_vulkan._device, transferFence, nullptr);
-	_computeCommandBufferAllocator.reset(_vulkan._device);
 
 	mesh.blasIndex = _accelerationStructure.bottomLevelAccelStructures.size() - 1;
 
@@ -190,7 +187,7 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 	_transferCommandBuffer.end();
 	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
 	_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
-	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, 99999999);
+	vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
 	_transferCommandBufferAllocator.reset(_vulkan._device);
 	vkDestroyFence(_vulkan._device, transferFence, nullptr);
 
@@ -304,15 +301,12 @@ void Raytracer::loadDummyMeshInstance()
 
 void Raytracer::initTLAS()
 {
-	VkFence buildFence;
-	VkFenceCreateInfo createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	createInfo.pNext = nullptr;
-	createInfo.flags = 0;
-
 	loadDummyMeshInstance();
 
-	_accelerationStructure.instanceBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
+	VGM::CommandBuffer raytraceBuildCommandBuffer(_computeCommandBufferAllocator, _vulkan._device);
+
+	_accelerationStructure.instanceBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT 
+		| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 		_maxDrawCount * sizeof(VkAccelerationStructureInstanceKHR), _vulkan._generalPurposeAllocator);
 
 	VkAccelerationStructureInstanceKHR dummyInstance;
@@ -326,31 +320,29 @@ void Raytracer::initTLAS()
 	dummyInstance.mask = 0xFF;
 	dummyInstance.instanceShaderBindingTableRecordOffset = 0;
 
-	vkCreateFence(_vulkan._device, &createInfo, nullptr, &buildFence);
-
 	void* dst = _accelerationStructure.instanceBuffer.map(_vulkan._generalPurposeAllocator);
 	memcpy(dst, &dummyInstance, sizeof(VkAccelerationStructureInstanceKHR));
 	_accelerationStructure.instanceBuffer.unmap(_vulkan._generalPurposeAllocator);
 
-	_raytraceBuildCommandBuffer.begin(nullptr, 0, _vulkan._device);
+	raytraceBuildCommandBuffer.begin(nullptr, 0, _vulkan._device);
 
-	_accelerationStructure.instanceBuffer.cmdMemoryBarrier(_raytraceBuildCommandBuffer.get(), VK_ACCESS_TRANSFER_WRITE_BIT,
+	_accelerationStructure.instanceBuffer.cmdMemoryBarrier(raytraceBuildCommandBuffer.get(), VK_ACCESS_TRANSFER_WRITE_BIT,
 		VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
 		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
 
 	uint32_t numInstances = 1;
-	VkDeviceAddress blasAddress = _accelerationStructure.bottomLevelAccelStructures.back().getAddress(_vulkan._device);
-
+	VkDeviceAddress instanceAddress = _accelerationStructure.instanceBuffer.getDeviceAddress(_vulkan._device);
+	
+	//error in this function 
 	_accelerationStructure.topLevelAccelStructure = TLAS(_accelerationStructure.instanceBuffer.get(), 1,
-		&blasAddress,
-		1, &numInstances, 1, _vulkan._device, _vulkan._meshAllocator, _raytraceBuildCommandBuffer.get());
+		&instanceAddress, 1, &numInstances, 1, _vulkan._device, _vulkan._meshAllocator, raytraceBuildCommandBuffer.get());
 
-	_raytraceBuildCommandBuffer.end();
-	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
-	_raytraceBuildCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, buildFence, _vulkan._computeQueue);
+	raytraceBuildCommandBuffer.end();
+	
+	raytraceBuildCommandBuffer.submit(nullptr, 0, nullptr, 0, nullptr, VK_NULL_HANDLE, _vulkan._computeQueue);
 
-	vkWaitForFences(_vulkan._device, 1, &buildFence, VK_TRUE, 999999999);
-	vkResetFences(_vulkan._device, 1, &buildFence);
+	vkDeviceWaitIdle(_vulkan._device);
+
 }
 
 void Raytracer::updateGBufferDescriptorSets()
@@ -528,6 +520,7 @@ void Raytracer::drawOffscreen()
 	currentGBuffer->depthBuffer.cmdPrepareTextureForFragmentShaderRead(offscreenCmd->get());
 
 	offscreenCmd->end();
+	
 	VkPipelineStageFlags waitFlag = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	offscreenCmd->submit(&offsceenRenderSemaphore, 1, &presentSemaphore, 1, &waitFlag, offscreenRenderFence, _vulkan._graphicsQeueu);
 

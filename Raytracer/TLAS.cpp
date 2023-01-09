@@ -1,7 +1,7 @@
 #include "TLAS.h"
 #include <vector>
 
-TLAS::TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBLASAdresses, uint32_t pBLASAdressesCount, 
+TLAS::TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pInstanceAddresses, uint32_t instanceAddressCount, 
 	uint32_t* pNumInstances, uint32_t numInstancesCount, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer)
 {
 	VkAccelerationStructureBuildRangeInfoKHR range;
@@ -22,7 +22,7 @@ TLAS::TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBL
 			VkAccelerationStructureGeometryInstancesDataKHR instances = {};
 			instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
 			instances.arrayOfPointers = VK_FALSE;
-			instances.data.deviceAddress = pBLASAdresses[b];
+			instances.data.deviceAddress = pInstanceAddresses[i];
 			
 			VkAccelerationStructureGeometryKHR geometry = {};
 			geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
