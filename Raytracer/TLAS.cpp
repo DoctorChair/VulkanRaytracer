@@ -78,3 +78,8 @@ void TLAS::destroy(VkDevice device, VmaAllocator allocator)
 	_scratchBuffer.destroy(allocator);
 	vkDestroyAccelerationStructureKHR(device, _tlas, nullptr);
 }
+
+VkAccelerationStructureKHR* TLAS::get()
+{
+	return &_tlas;
+}

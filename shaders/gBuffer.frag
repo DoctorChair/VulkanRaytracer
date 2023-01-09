@@ -17,7 +17,6 @@ layout(set = 1, binding = 3) uniform sampler roughnessSampler;
 
 layout(set = 3, binding = 0) uniform texture2D textures[1024]; 
 
-
 void main()
 {
 	//return color

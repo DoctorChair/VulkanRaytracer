@@ -76,6 +76,11 @@ RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderSt
 	createSamplers(device);
 }
 
+void RaytracingShader::cmdBind(VkCommandBuffer commandBuffer)
+{
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _raytracingPipeline);
+}
+
 VkResult RaytracingShader::getShaderHandles(std::vector<uint8_t>& handles, VkDevice device, uint32_t groupHandleSize, uint32_t handleAlignment)
 {
 	uint32_t alignedGroupHandleSize = groupHandleSize;
@@ -96,7 +101,17 @@ uint32_t RaytracingShader::shaderGroupCount()
 	return _shaderGroupCount;
 }
 
-std::vector<VkSampler>& RaytracingShader::getSampelers()
+uint32_t RaytracingShader::missShaderCount()
+{
+	return _missCount;
+}
+
+uint32_t RaytracingShader::hitShaderCount()
+{
+	return _hitCount;
+}
+
+std::vector<VkSampler>& RaytracingShader::getSamplers()
 {
 	return _samplers;
 }

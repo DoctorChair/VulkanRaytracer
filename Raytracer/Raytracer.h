@@ -114,7 +114,7 @@ struct FrameSynchro
 	VkSemaphore _raytraceSemaphore;
 	VkFence _offsrceenRenderFence;
 	VkFence _defferedRenderFence;
-	VkFence _RaytraceFence;
+	VkFence _raytraceFence;
 };
 
 class Raytracer
@@ -132,6 +132,7 @@ public:
 private:
 	void initDescriptorSetAllocator();
 	void initDescriptorSetLayouts();
+	void initDescripotrSets();
 	void initGBufferShader();
 	void initDefferedShader();
 	void initRaytraceShader();
@@ -197,6 +198,9 @@ private:
 	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
 	std::vector<VGM::CommandBuffer> _defferedRenderCommandBuffers;
 
+	VGM::CommandBufferAllocator _computeCommandBufferAllocator;
+	std::vector<VGM::CommandBuffer> _raytraceRenderCommandBuffers;
+
 	VGM::CommandBufferAllocator _transferCommandBufferAllocator;
 	VGM::CommandBuffer _transferCommandBuffer;
 
@@ -210,32 +214,32 @@ private:
 	std::vector<VkDrawIndexedIndirectCommand> _drawCommandTransferCache;
 	std::vector<DrawData> _drawDataTransferCache;
 
-	std::vector<VGM::DescriptorSetAllocator> _offsecreenDescriptorSetAllocators;
+	VGM::DescriptorSetAllocator _offsecreenDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
-	std::vector<VGM::DescriptorSetAllocator> _defferedDescriptorSetAllocators;
-	std::vector<VGM::DescriptorSetAllocator> _raytracerDescriptorSetAllocators;
+	VGM::DescriptorSetAllocator _defferedDescriptorSetAllocator;
+	VGM::DescriptorSetAllocator _raytracerDescriptorSetAllocator;
 
-	VkDescriptorSetLayout globalLayout;
-	VkDescriptorSetLayout gBufferLayout1;
+	VkDescriptorSetLayout _globalLayout;
+	VkDescriptorSetLayout _gBufferLayout1;
 
-	VkDescriptorSetLayout gBufferLayout2;
+	VkDescriptorSetLayout _gBufferLayout2;
 
-	VkDescriptorSetLayout textureLayout;
+	VkDescriptorSetLayout _textureLayout;
 
 	VkDescriptorSetLayout _defferedLayout;
 
 	VkDescriptorSetLayout _raytracerLayout1;
 	VkDescriptorSetLayout _raytracerLayout2;
 
-	VkDescriptorSet _globalDescriptorSet;
+	std::vector<VkDescriptorSet> _globalDescriptorSets;
 
-	VkDescriptorSet _gBuffer1DescripotrSet;
-	VkDescriptorSet _gBuffer2DescriptorSet;
+	std::vector<VkDescriptorSet> _gBuffer1DescripotrSets;
+	std::vector<VkDescriptorSet> _gBuffer2DescriptorSets;
 
-	VkDescriptorSet _textureDescriptorSet;
+	std::vector<VkDescriptorSet> _textureDescriptorSets;
 
-	VkDescriptorSet _defferedDescriptorSet;
+	std::vector<VkDescriptorSet> _defferedDescriptorSets;
 
-	VkDescriptorSet _raytracerDescriptorSet1;
-	VkDescriptorSet _raytracerDescriptorSet2;
+	std::vector<VkDescriptorSet> _raytracer1DescriptorSets;
+	std::vector<VkDescriptorSet> _raytracer2DescriptorSets;
 };

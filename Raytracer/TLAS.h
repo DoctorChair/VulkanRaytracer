@@ -11,6 +11,7 @@ public:
 	TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBLASAdresses, uint32_t pBLASAdressesCount,
 		uint32_t* pNumInstances, uint32_t numInstancesCount, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer);
 	void destroy(VkDevice device, VmaAllocator allocator);
+	VkAccelerationStructureKHR* get();
 
 private:
 	VGM::Buffer _tlasBuffer;
