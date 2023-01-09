@@ -11,6 +11,7 @@ public:
 	BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat vertexFormat, 
 		VkDeviceSize vertexStride, VkIndexType indexType, uint32_t maxVertices, 
 		uint32_t VertexOffset, uint32_t IndicesCount, uint32_t IndicesOffeset, VkDevice device, VmaAllocator& allocator, VkCommandBuffer commandBuffer);
+	VkDeviceAddress getAddress(VkDevice device);
 	void destroy(VkDevice device, VmaAllocator allocator);
 
 private:

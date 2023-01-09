@@ -1,5 +1,6 @@
 #include "BLAS.h"
 
+
 BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat vertexFormat, 
 	VkDeviceSize vertexStride, VkIndexType indexType, uint32_t maxVertices, 
 	uint32_t VertexOffset, uint32_t IndicesCount, uint32_t IndicesOffeset, VkDevice device, VmaAllocator& allocator, VkCommandBuffer commandBuffer)
@@ -67,6 +68,16 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 	VkAccelerationStructureBuildRangeInfoKHR * pRangeInfo = &range;
 
 	vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &build, &pRangeInfo);
+}
+
+VkDeviceAddress BLAS::getAddress(VkDevice device)
+{
+	VkAccelerationStructureDeviceAddressInfoKHR info = {};
+	info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+	info.pNext = nullptr;
+	info.accelerationStructure = _blas;
+	
+	return  vkGetAccelerationStructureDeviceAddressKHR(device, &info);
 }
 
 void BLAS::destroy(VkDevice device, VmaAllocator allocator)

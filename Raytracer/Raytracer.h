@@ -20,6 +20,8 @@
 #include "RaytracingShader.h"
 #include "ShaderBindingTable.h"
 
+#include <unordered_map>
+
 struct GBuffer
 {
 	VGM::Framebuffer framebuffer;
@@ -54,6 +56,7 @@ struct AccelerationStructure
 {
 	std::vector<BLAS> bottomLevelAccelStructures;
 	TLAS topLevelAccelStructure;
+	VGM::Buffer instanceBuffer;
 };
 
 struct Material
@@ -70,6 +73,7 @@ struct Mesh
 	uint32_t vertexOffset;
 	uint32_t indicesCount;
 	uint32_t vertexCount;
+	uint32_t blasIndex;
 	Material material;
 };
 
@@ -123,6 +127,7 @@ public:
 	Raytracer() = default;
 	void init(SDL_Window* window);
 	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
+
 	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels);
 	void loadModel();
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
@@ -146,6 +151,10 @@ private:
 	void initPresentFramebuffers();
 	void initTextureArrays();
 	void initShaderBindingTable();
+
+	void loadDummyMeshInstance();
+	void initTLAS();
+
 
 	void updateGBufferDescriptorSets();
 	void updateDefferedDescriptorSets();
@@ -200,6 +209,7 @@ private:
 
 	VGM::CommandBufferAllocator _computeCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _raytraceRenderCommandBuffers;
+	VGM::CommandBuffer _raytraceBuildCommandBuffer;
 
 	VGM::CommandBufferAllocator _transferCommandBufferAllocator;
 	VGM::CommandBuffer _transferCommandBuffer;
@@ -242,4 +252,6 @@ private:
 
 	std::vector<VkDescriptorSet> _raytracer1DescriptorSets;
 	std::vector<VkDescriptorSet> _raytracer2DescriptorSets;
+
+	Mesh _dummyMesh;
 };

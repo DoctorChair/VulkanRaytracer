@@ -23,12 +23,12 @@ TLAS::TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBL
 			instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
 			instances.arrayOfPointers = VK_FALSE;
 			instances.data.deviceAddress = pBLASAdresses[b];
-
+			
 			VkAccelerationStructureGeometryKHR geometry = {};
 			geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
 			geometry.pNext = nullptr;
 			geometry.geometry.instances = instances;
-
+			geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
 			geometries.push_back(geometry);
 		}
 	}
@@ -62,6 +62,8 @@ TLAS::TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBL
 	createInfo.offset = 0;
 
 	vkCreateAccelerationStructureKHR(device, &createInfo, nullptr, &_tlas);
+
+	build.dstAccelerationStructure = _tlas;
 
 	_scratchBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, size.buildScratchSize, allocator);
 
