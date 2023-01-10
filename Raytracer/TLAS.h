@@ -16,6 +16,7 @@ public:
 private:
 	VGM::Buffer _tlasBuffer;
 	VGM::Buffer _scratchBuffer;
+	VGM::Buffer _instanceBuffer;
 	VkAccelerationStructureKHR _tlas;
 
 };
