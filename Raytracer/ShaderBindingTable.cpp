@@ -41,10 +41,10 @@ ShaderBindingTable::ShaderBindingTable(uint32_t shaderGroupCount, uint32_t group
 	_missRegion.stride = alignedGroupHandleSize;
 	_missRegion.size = (r == 0) ? alignedGroupHandleSize * missCount : alignedGroupHandleSize * missCount + (shaderGroupBaseAlignment - r);
 
-	r = (alignedGroupHandleSize * hitCount) %shaderGroupBaseAlignment;
-	_hitRegion.deviceAddress = _rgenRegion.size + _rgenRegion.size + _missRegion.size;
-	_missRegion.stride = alignedGroupHandleSize;
-	_missRegion.size = (r == 0) ? alignedGroupHandleSize * hitCount : alignedGroupHandleSize * hitCount + (shaderGroupBaseAlignment - r);
+	r = (alignedGroupHandleSize * hitCount) % shaderGroupBaseAlignment;
+	_hitRegion.deviceAddress = _rgenRegion.deviceAddress + _rgenRegion.size + _missRegion.size;
+	_hitRegion.stride = alignedGroupHandleSize;
+	_hitRegion.size = (r == 0) ? alignedGroupHandleSize * hitCount : alignedGroupHandleSize * hitCount + (shaderGroupBaseAlignment - r);
 }
 
 VkStridedDeviceAddressRegionKHR ShaderBindingTable::getRaygenRegion()

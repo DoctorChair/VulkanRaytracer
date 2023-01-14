@@ -51,7 +51,7 @@ void main()
     float tMin     = 0.001;
     float tMax     = 10000.0;
 
-     traceRayEXT(topLevelAS, // acceleration structure
+     /*traceRayEXT(topLevelAS, // acceleration structure
           rayFlags,       // rayFlags
           0xFF,           // cullMask
           0,              // sbtRecordOffset
@@ -62,7 +62,7 @@ void main()
           normal.xyz,  // ray direction
           tMax,           // ray max range
           0               // payload (location = 0)
-  );
+  );*/
 
-    imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(prd.hitValue, 1.0));
+    imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 1.0));
 }

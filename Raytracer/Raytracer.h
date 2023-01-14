@@ -46,6 +46,12 @@ struct DefferedBuffer
 	VkImageView colorView;
 };
 
+struct RaytraceBuffer
+{
+	VGM::Texture colorBuffer;
+	VkImageView colorView;
+};
+
 struct MeshBuffer
 {
 	VGM::Buffer vertices;
@@ -116,9 +122,11 @@ struct FrameSynchro
 	VkSemaphore _offsceenRenderSemaphore;
 	VkSemaphore _defferedRenderSemaphore;
 	VkSemaphore _raytraceSemaphore;
+	VkSemaphore _compositingSemaphore;
 	VkFence _offsrceenRenderFence;
 	VkFence _defferedRenderFence;
 	VkFence _raytraceFence;
+	VkFence _compositingFence;
 };
 
 class Raytracer
@@ -141,6 +149,7 @@ private:
 	void initGBufferShader();
 	void initDefferedShader();
 	void initRaytraceShader();
+	void initCompositingShader();
 	void initCommandBuffers();
 	void initSyncStructures();
 	void initDataBuffers();
@@ -148,6 +157,7 @@ private:
 	void initMeshBuffer();
 	void initgBuffers();
 	void initDefferedBuffers();
+	void initRaytraceBuffers();
 	void initPresentFramebuffers();
 	void initTextureArrays();
 	void initShaderBindingTable();
@@ -155,13 +165,15 @@ private:
 	void loadDummyMeshInstance();
 	void initTLAS();
 
-
 	void updateGBufferDescriptorSets();
 	void updateDefferedDescriptorSets();
 	void updateRaytraceDescripotrSets();
+	void updateCompositingDescriptorSets();
+	
 	void drawOffscreen();
 	void renderDeffered();
 	void traceRays();
+	void composit();
 
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
@@ -195,9 +207,12 @@ private:
 
 	RaytracingShader _raytraceShader;
 	VkPipelineLayout _raytracePipelineLayout;
-	std::vector<VGM::Framebuffer> _presentFramebuffers;
-
 	ShaderBindingTable _shaderBindingTable;
+	std::vector<RaytraceBuffer> _raytraceBufferChain;
+	
+	VGM::ShaderProgram _compositingShader;
+	VkPipelineLayout _compositingPipelineLayout;
+	std::vector<VGM::Framebuffer> _presentFramebuffers;
 
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 
@@ -207,6 +222,7 @@ private:
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
 	std::vector<VGM::CommandBuffer> _defferedRenderCommandBuffers;
+	std::vector<VGM::CommandBuffer> _compositingCommandBuffers;
 
 	VGM::CommandBufferAllocator _computeCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _raytraceRenderCommandBuffers;
@@ -229,6 +245,7 @@ private:
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _defferedDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _raytracerDescriptorSetAllocator;
+	VGM::DescriptorSetAllocator _compositingDescriptorSetAllocator;
 
 	VkDescriptorSetLayout _globalLayout;
 	VkDescriptorSetLayout _gBufferLayout1;
@@ -242,6 +259,8 @@ private:
 	VkDescriptorSetLayout _raytracerLayout1;
 	VkDescriptorSetLayout _raytracerLayout2;
 
+	VkDescriptorSetLayout _compositingLayout;
+
 	std::vector<VkDescriptorSet> _globalDescriptorSets;
 
 	std::vector<VkDescriptorSet> _gBuffer1DescripotrSets;
@@ -253,6 +272,8 @@ private:
 
 	std::vector<VkDescriptorSet> _raytracer1DescriptorSets;
 	std::vector<VkDescriptorSet> _raytracer2DescriptorSets;
+
+	std::vector<VkDescriptorSet> _compositingDescriptorSets;
 
 	Mesh _dummyMesh;
 };
