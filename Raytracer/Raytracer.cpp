@@ -982,7 +982,7 @@ void Raytracer::initGBufferShader()
 	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment, colorBlendAttachment };
 
 	configurator.setRenderingFormats(renderingColorFormats, VK_FORMAT_D32_SFLOAT, VK_FORMAT_UNDEFINED);
-	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 100.0f, 0.0f, 0.0f);
+	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 1.0f, 0.0f, 0.0f);
 	configurator.setScissorState(windowWidth, windowHeight, 0.0f, 0.0f);
 	configurator.setInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	configurator.setColorBlendingState(colorBlendAttachments);
