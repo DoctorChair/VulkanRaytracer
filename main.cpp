@@ -1,6 +1,7 @@
 #include "VulkanContext.h"
 #include "ModelLoader/ModelLoader.h"
 #include "Raytracer/Raytracer.h"
+#include "glm/gtc/matrix_transform.hpp"
 
 int main(int argc, char* argv[])
 {
@@ -22,6 +23,14 @@ int main(int argc, char* argv[])
 
 	uint32_t index = raytracer.loadTexture(pixels, 1024, 1024, 1);
 
+	glm::vec3 position = glm::vec3(1.0f, 0.0f, 10.0f);
+	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
+	glm::vec3 front = glm::vec3(0.0f, 0.0f, -1.0f);
+
+	glm::mat4 view = glm::lookAt(position, position + front, up);
+	glm::mat4 projection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
+	raytracer.setCamera(view, projection, position);
+
 	bool quit = false;
 	SDL_Event e;
 	while (!quit)
@@ -36,8 +45,9 @@ int main(int argc, char* argv[])
 			}
 		}
 		glm::mat4 matrix = glm::mat4(10.0f);
-		raytracer.drawMesh(mesh, glm::mat4(1.0f), 0);
-		raytracer.drawMesh(mesh2, glm::mat4(1.0f), 0);
+
+		raytracer.drawMesh(mesh, glm::mat4(0.1f), 0);
+		raytracer.drawMesh(mesh2, glm::mat4(0.1f), 0);
 		raytracer.update();
 	}
 

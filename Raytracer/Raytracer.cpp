@@ -226,6 +226,30 @@ void Raytracer::drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID)
 	_drawCommandTransferCache.push_back(command);
 }
 
+void Raytracer::drawSunLight()
+{
+
+}
+
+void Raytracer::drawPointLight()
+{
+
+}
+
+void Raytracer::drawSpotLight()
+{
+
+}
+
+void Raytracer::setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position)
+{
+	_cameraData.viewMatrix = viewMatrix;
+	_cameraData.projectionMatrix = projectionMatrix;
+	_cameraData.cameraPosition = position;
+	_cameraData.inverseViewMatrix = glm::inverse(viewMatrix);
+	_cameraData.inverseProjectionMatrix = glm::inverse(projectionMatrix);
+}
+
 void Raytracer::update()
 {
 	_currentSwapchainIndex = _vulkan.aquireNextImageIndex(VK_NULL_HANDLE, _frameSynchroStructs[_currentFrameIndex]._presentSemaphore);
@@ -500,11 +524,21 @@ void Raytracer::drawOffscreen()
 		_drawDataTransferCache.size() * sizeof(DrawData),
 		_vulkan._gpuAllocator);
 	
+	_drawIndirectCommandBuffer[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
+	_drawDataIsntanceBuffers[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
+
 	//temporary
 	CameraData camData = {};
-	_cameraBuffers[_currentFrameIndex].uploadData(&camData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
+	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 	globalRenderData globalData = {};
 	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&globalData, sizeof(globalData), _vulkan._generalPurposeAllocator);
+
+	_cameraBuffers[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
+	_globalRenderDataBuffers[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
 
 	updateGBufferDescriptorSets();
 
@@ -894,11 +928,12 @@ void Raytracer::initGBufferShader()
 	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment, colorBlendAttachment };
 
 	configurator.setRenderingFormats(renderingColorFormats, VK_FORMAT_D32_SFLOAT, VK_FORMAT_UNDEFINED);
-	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 1.0f, 0.0f, 0.0f);
+	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 100.0f, 0.0f, 0.0f);
 	configurator.setScissorState(windowWidth, windowHeight, 0.0f, 0.0f);
 	configurator.setInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	configurator.setColorBlendingState(colorBlendAttachments);
 	configurator.setDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
+	
 
 	configurator.addVertexAttribInputDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0); //Position
 	configurator.addVertexAttribInputDescription(1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(float)); //texCoord
@@ -1084,5 +1119,18 @@ void Raytracer::initDataBuffers()
 		_drawIndirectCommandBuffer[i] = VGM::Buffer(VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, _maxDrawCount * sizeof(VkDrawIndexedIndirectCommand), _vulkan._generalPurposeAllocator);
 		_cameraBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(globalRenderData), _vulkan._generalPurposeAllocator);
+	}
+}
+
+void Raytracer::initLightBuffers()
+{
+	_sunLightBuffers.reserve(_concurrencyCount);
+	_pointLightBuffers.reserve(_concurrencyCount);
+	_spotLightBuffers.reserve(_concurrencyCount);
+	for(unsigned int i = 0; i<_concurrencyCount; i++)
+	{
+		_pointLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(PointLight), _vulkan._generalPurposeAllocator);
+		_sunLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(SunLight), _vulkan._generalPurposeAllocator);
+		_spotLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(SpotLight), _vulkan._generalPurposeAllocator);
 	}
 }

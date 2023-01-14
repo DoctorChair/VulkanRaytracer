@@ -104,12 +104,15 @@ struct Model
 struct globalRenderData
 {
 	float fog;
+	uint32_t sunLightCount = 0;
+	uint32_t pointLightCout = 0;
+	uint32_t spotLightCount = 0;
 };
 
 struct CameraData
 {
 	glm::mat4 viewMatrix;
-	glm::mat4 inverseviewMatrix;
+	glm::mat4 inverseViewMatrix;
 	glm::mat4 projectionMatrix;
 	glm::mat4 inverseProjectionMatrix;
 	glm::vec3 cameraPosition;
@@ -129,16 +132,40 @@ struct FrameSynchro
 	VkFence _compositingFence;
 };
 
+struct SunLight
+{
+	glm::vec3 position;
+	glm::vec3 direction;
+	glm::vec4 color;
+};
+
+struct PointLight
+{
+	glm::vec3 position;
+	glm::vec4 color;
+};
+
+struct SpotLight
+{
+	glm::vec3 position;
+	glm::vec3 direction;
+	float openingAngle;
+	glm::vec4 color;
+};
+
 class Raytracer
 {
 public:
 	Raytracer() = default;
 	void init(SDL_Window* window);
-	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
 
+	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
 	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels);
-	void loadModel();
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
+	void drawSunLight();
+	void drawPointLight();
+	void drawSpotLight();
+	void setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position);
 	void update();
 	void destroy();
 
@@ -153,6 +180,7 @@ private:
 	void initCommandBuffers();
 	void initSyncStructures();
 	void initDataBuffers();
+	void initLightBuffers();
 
 	void initMeshBuffer();
 	void initgBuffers();
@@ -187,6 +215,9 @@ private:
 	uint32_t _maxTriangleCount = 10000000;
 	uint32_t _maxMipMapLevels = 1;
 	uint64_t _timeout = 1000000000;
+	uint32_t _maxSunLights = 10;
+	uint32_t _maxPointLighst = 10;
+	uint32_t _maxSpotLights = 10;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;
@@ -238,8 +269,18 @@ private:
 	std::vector<VGM::Buffer> _drawDataIsntanceBuffers;
 	std::vector<VGM::Buffer> _drawIndirectCommandBuffer;
 
+	std::vector<VGM::Buffer> _sunLightBuffers;
+	std::vector<VGM::Buffer> _pointLightBuffers;
+	std::vector<VGM::Buffer> _spotLightBuffers;
+
 	std::vector<VkDrawIndexedIndirectCommand> _drawCommandTransferCache;
 	std::vector<DrawData> _drawDataTransferCache;
+
+	std::vector<SunLight> _sunLightTransferCache;
+	std::vector<PointLight> _pointLightTransferCache;
+	std::vector<SpotLight> _spotLightTransferCache;
+
+	CameraData _cameraData = {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::vec3(0.0f)};
 
 	VGM::DescriptorSetAllocator _offsecreenDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;

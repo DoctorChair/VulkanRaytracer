@@ -44,7 +44,10 @@ layout(std140, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 void main()
 {
 	mat4 model = drawData.instanceData[gl_InstanceIndex].modelMatrix;
-	outPos = (model * vec4(vertexPos, 1.0f)).xyz;
+	mat4 view = cameraData.viewMatrix;
+	mat4 projection = cameraData.projectionMatrix;
+
+	outPos = ( cameraData.projectionMatrix * cameraData.viewMatrix * model * vec4(vertexPos, 1.0f)).xyz;
 	texCoords = texCoord;
-	gl_Position = model * vec4(vertexPos, 1.0f);
+	gl_Position = projection * view  * model * vec4(vertexPos, 1.0f);
 }
