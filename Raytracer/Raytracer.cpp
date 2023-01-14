@@ -73,6 +73,7 @@ void Raytracer::init(SDL_Window* window)
 	initSyncStructures();
 	initCommandBuffers();
 	initDataBuffers();
+	initLightBuffers();
 
 	initgBuffers();
 	initDefferedBuffers();
@@ -226,19 +227,19 @@ void Raytracer::drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID)
 	_drawCommandTransferCache.push_back(command);
 }
 
-void Raytracer::drawSunLight()
+void Raytracer::drawSunLight(SunLight light)
 {
-
+	_sunLightTransferCache.push_back(light);
 }
 
-void Raytracer::drawPointLight()
+void Raytracer::drawPointLight(PointLight light)
 {
-
+	_pointLightTransferCache.push_back(light);
 }
 
-void Raytracer::drawSpotLight()
+void Raytracer::drawSpotLight(SpotLight light)
 {
-
+	_spotLightTransferCache.push_back(light);
 }
 
 void Raytracer::setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position)
@@ -432,17 +433,41 @@ void Raytracer::updateDefferedDescriptorSets()
 {
 	GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
 	
+	VGM::Buffer* currentSunLightBuffer = &_sunLightBuffers[_currentFrameIndex];
+	VGM::Buffer* currentPointLightBuffer = &_pointLightBuffers[_currentFrameIndex];
+	VGM::Buffer* currentSpotLightBuffer = &_spotLightBuffers[_currentFrameIndex];
+
 	VkDescriptorImageInfo positionInfo;
 	positionInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	positionInfo.imageView = currentGBuffer->positionView;
 	positionInfo.sampler = _defferedShader.getSamplers()[0];
 
-	VGM::DescriptorSetUpdater::begin(&_defferedDescriptorSets[_currentFrameIndex])
+	VkDescriptorBufferInfo sunInfo = {};
+	sunInfo.buffer = currentSunLightBuffer->get();
+	sunInfo.offset = 0;
+	sunInfo.range = currentSunLightBuffer->size();
+
+	VkDescriptorBufferInfo pointInfo = {};
+	pointInfo.buffer = currentPointLightBuffer->get();
+	pointInfo.offset = 0;
+	pointInfo.range = currentPointLightBuffer->size();
+
+	VkDescriptorBufferInfo spotInfo = {};
+	spotInfo.buffer = currentSpotLightBuffer->get();
+	spotInfo.offset = 0;
+	spotInfo.range = currentSpotLightBuffer->size();
+
+	VkDescriptorSet sets[] = { _defferedDescriptorSets[_currentFrameIndex], _lightDescripotrSets[_currentFrameIndex] };
+
+	VGM::DescriptorSetUpdater::begin(sets)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1, 0, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1, 0, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1, 0, 2)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1, 0, 3)
-		.updateDescriptorSet(_vulkan._device);
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, sunInfo, 1, 1, 0)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, pointInfo, 1, 1, 1)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, spotInfo, 1, 1, 2)
+		.updateDescriptorSet(_vulkan._device);	
 }
 
 void Raytracer::updateRaytraceDescripotrSets()
@@ -529,7 +554,6 @@ void Raytracer::drawOffscreen()
 	_drawDataIsntanceBuffers[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
 
-	//temporary
 	CameraData camData = {};
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 	globalRenderData globalData = {};
@@ -590,7 +614,6 @@ void Raytracer::renderDeffered()
 
 	VGM::DescriptorSetAllocator* currentDefferedDescriptorSetAllocator = &_defferedDescriptorSetAllocator;
 	
-
 	DefferedBuffer* currentDefferedBuffer = &_defferdBufferChain[_currentFrameIndex];
 	
 	GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
@@ -600,10 +623,25 @@ void Raytracer::renderDeffered()
 	VkRect2D renderArea = { 0, 0, windowWidth, windowHeight };
 
 	VkDescriptorSet descriptorSets[] = {
-		_defferedDescriptorSets[_currentFrameIndex] };
+		_defferedDescriptorSets[_currentFrameIndex],
+		_lightDescripotrSets[_currentFrameIndex]};
+
+	_sunLightBuffers[_currentFrameIndex].uploadData(_sunLightTransferCache.data(),
+		_sunLightTransferCache.size() * sizeof(SunLight), _vulkan._generalPurposeAllocator);
+	_pointLightBuffers[_currentFrameIndex].uploadData(_pointLightTransferCache.data(), 
+		_pointLightTransferCache.size() * sizeof(PointLight), _vulkan._generalPurposeAllocator);
+	_spotLightBuffers[_currentFrameIndex].uploadData(_spotLightTransferCache.data(),
+		_spotLightTransferCache.size() * sizeof(SpotLight), _vulkan._generalPurposeAllocator);
 
 	defferedCmd->begin(&defferendRenderFence, 1, _vulkan._device);
 	
+	_sunLightBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(), 
+		VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0);
+	_pointLightBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(),
+		VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0);
+	_pointLightBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(),
+		VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0);
+
 	updateDefferedDescriptorSets();
 
 	currentDefferedBuffer->colorBuffer.cmdPrepareTextureForFragmentShaderWrite(defferedCmd->get());
@@ -643,6 +681,10 @@ void Raytracer::renderDeffered()
 
 	VkPipelineStageFlags waitFlag = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	defferedCmd->submit(&defferedRenderSemaphore, 1, &offsceenRenderSemaphore, 1, &waitFlag, defferendRenderFence, _vulkan._graphicsQeueu);
+
+	_sunLightTransferCache.clear();
+	_pointLightTransferCache.clear();
+	_spotLightTransferCache.clear();
 }
 
 void Raytracer::traceRays()
@@ -844,6 +886,12 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_defferedLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.createDescriptorSetLayout(_vulkan._device, &_lightLayout);
+
+	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, _maxTextureCount)
 		.createDescriptorSetLayout(_vulkan._device, &_textureLayout);
 
@@ -869,6 +917,7 @@ void Raytracer::initDescripotrSets()
 	_gBuffer1DescripotrSets.resize(_concurrencyCount);
 	_gBuffer2DescriptorSets.resize(_concurrencyCount);
 	_defferedDescriptorSets.resize(_concurrencyCount);
+	_lightDescripotrSets.resize(_concurrencyCount);
 	_textureDescriptorSets.resize(_concurrencyCount);
 	_raytracer1DescriptorSets.resize(_concurrencyCount);
 	_raytracer2DescriptorSets.resize(_concurrencyCount);
@@ -877,14 +926,19 @@ void Raytracer::initDescripotrSets()
 	for(unsigned int i = 0; i< _concurrencyCount; i++)
 	{
 		VGM::DescriptorSetBuilder::begin()
+
 			.createDescriptorSet(_vulkan._device, &_globalDescriptorSets[i], &_globalLayout, _offsecreenDescriptorSetAllocator);
 		VGM::DescriptorSetBuilder::begin()
+
 			.createDescriptorSet(_vulkan._device, &_gBuffer1DescripotrSets[i], &_gBufferLayout1, _offsecreenDescriptorSetAllocator);
 		VGM::DescriptorSetBuilder::begin()
 			.createDescriptorSet(_vulkan._device, &_gBuffer2DescriptorSets[i], &_gBufferLayout2, _offsecreenDescriptorSetAllocator);
 
 		VGM::DescriptorSetBuilder::begin()
 			.createDescriptorSet(_vulkan._device, &_defferedDescriptorSets[i], &_defferedLayout, _defferedDescriptorSetAllocator);
+
+		VGM::DescriptorSetBuilder::begin()
+			.createDescriptorSet(_vulkan._device, &_lightDescripotrSets[i], &_lightLayout, _defferedDescriptorSetAllocator);
 
 		VGM::DescriptorSetBuilder::begin()
 			.createDescriptorSet(_vulkan._device, &_textureDescriptorSets[i], &_textureLayout, _defferedDescriptorSetAllocator);
@@ -947,14 +1001,14 @@ void Raytracer::initGBufferShader()
 
 void Raytracer::initDefferedShader()
 {
-	VkDescriptorSetLayout setLayouts[] = {_defferedLayout};
+	VkDescriptorSetLayout setLayouts[] = {_defferedLayout, _lightLayout};
 
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	createInfo.pNext = nullptr;
 	createInfo.flags = 0;
 	createInfo.pushConstantRangeCount = 0;
-	createInfo.setLayoutCount = 1;
+	createInfo.setLayoutCount = 2;
 	createInfo.pSetLayouts = &_defferedLayout;
 	
 	vkCreatePipelineLayout(_vulkan._device, &createInfo, nullptr, &_defferedPipelineLayout);
@@ -1124,9 +1178,9 @@ void Raytracer::initDataBuffers()
 
 void Raytracer::initLightBuffers()
 {
-	_sunLightBuffers.reserve(_concurrencyCount);
-	_pointLightBuffers.reserve(_concurrencyCount);
-	_spotLightBuffers.reserve(_concurrencyCount);
+	_sunLightBuffers.resize(_concurrencyCount);
+	_pointLightBuffers.resize(_concurrencyCount);
+	_spotLightBuffers.resize(_concurrencyCount);
 	for(unsigned int i = 0; i<_concurrencyCount; i++)
 	{
 		_pointLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(PointLight), _vulkan._generalPurposeAllocator);

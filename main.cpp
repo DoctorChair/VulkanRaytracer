@@ -31,6 +31,10 @@ int main(int argc, char* argv[])
 	glm::mat4 projection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
 	raytracer.setCamera(view, projection, position);
 
+	PointLight point = {};
+	SunLight sun = {};
+	SpotLight spot = {};
+
 	bool quit = false;
 	SDL_Event e;
 	while (!quit)
@@ -48,6 +52,9 @@ int main(int argc, char* argv[])
 
 		raytracer.drawMesh(mesh, glm::mat4(0.1f), 0);
 		raytracer.drawMesh(mesh2, glm::mat4(0.1f), 0);
+		raytracer.drawPointLight(point);
+		raytracer.drawSpotLight(spot);
+		raytracer.drawSunLight(sun);
 		raytracer.update();
 	}
 

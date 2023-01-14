@@ -162,9 +162,9 @@ public:
 	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
 	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels);
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
-	void drawSunLight();
-	void drawPointLight();
-	void drawSpotLight();
+	void drawSunLight(SunLight light);
+	void drawPointLight(PointLight light);
+	void drawSpotLight(SpotLight light);
 	void setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position);
 	void update();
 	void destroy();
@@ -297,6 +297,8 @@ private:
 
 	VkDescriptorSetLayout _defferedLayout;
 
+	VkDescriptorSetLayout _lightLayout;
+
 	VkDescriptorSetLayout _raytracerLayout1;
 	VkDescriptorSetLayout _raytracerLayout2;
 
@@ -310,6 +312,8 @@ private:
 	std::vector<VkDescriptorSet> _textureDescriptorSets;
 
 	std::vector<VkDescriptorSet> _defferedDescriptorSets;
+
+	std::vector<VkDescriptorSet> _lightDescripotrSets;
 
 	std::vector<VkDescriptorSet> _raytracer1DescriptorSets;
 	std::vector<VkDescriptorSet> _raytracer2DescriptorSets;
