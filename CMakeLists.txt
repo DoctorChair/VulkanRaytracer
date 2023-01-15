@@ -14,6 +14,8 @@ add_subdirectory(Raytracer)
 #add executable
 add_executable(${PROJECT_NAME} 
     ${CMAKE_SOURCE_DIR}/main.cpp
+    ${CMAKE_SOURCE_DIR}/CameraController.h
+    ${CMAKE_SOURCE_DIR}/CameraController.cpp
     )
 
 #add includes

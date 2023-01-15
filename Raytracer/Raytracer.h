@@ -21,6 +21,7 @@
 #include "ShaderBindingTable.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 struct GBuffer
 {
@@ -67,20 +68,20 @@ struct AccelerationStructure
 
 struct Material
 {
-	uint32_t albedoIndex;
-	uint32_t metallicIndex;
-	uint32_t normalIndex;
-	uint32_t roughnessIndex;
+	uint32_t albedoIndex = 0;
+	uint32_t metallicIndex = 0;
+	uint32_t normalIndex = 0;
+	uint32_t roughnessIndex = 0;
 };
 
 struct Mesh
 {
-	uint32_t indexOffset;
-	uint32_t vertexOffset;
-	uint32_t indicesCount;
-	uint32_t vertexCount;
-	uint32_t blasIndex;
-	Material material;
+	uint32_t indexOffset = 0;
+	uint32_t vertexOffset = 0;
+	uint32_t indicesCount = 0;
+	uint32_t vertexCount = 0;
+	uint32_t blasIndex = 0;
+	Material material = {};
 };
 
 struct Instance
@@ -94,6 +95,7 @@ struct DrawData
 	glm::mat4 modelMatrix;
 	Material material;
 	uint32_t ID;
+	uint32_t padding[3];
 };
 
 struct Model
@@ -137,12 +139,14 @@ struct SunLight
 	glm::vec3 position;
 	glm::vec3 direction;
 	glm::vec4 color;
+	float strength;
 };
 
 struct PointLight
 {
 	glm::vec3 position;
 	glm::vec4 color;
+	float strength;
 };
 
 struct SpotLight
@@ -151,6 +155,7 @@ struct SpotLight
 	glm::vec3 direction;
 	float openingAngle;
 	glm::vec4 color;
+	float strength;
 };
 
 class Raytracer
@@ -160,7 +165,7 @@ public:
 	void init(SDL_Window* window);
 
 	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
-	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels);
+	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels, const std::string& name);
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
 	void drawPointLight(PointLight light);
@@ -214,13 +219,14 @@ private:
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 10000000;
 	uint32_t _maxMipMapLevels = 1;
-	uint64_t _timeout = 1000000000;
+	uint64_t _timeout = 100000000;
 	uint32_t _maxSunLights = 10;
 	uint32_t _maxPointLighst = 10;
 	uint32_t _maxSpotLights = 10;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;
+	std::unordered_map<std::string, uint32_t> _loadedImages;
 
 	std::vector<Mesh> _loadedMeshes;
 	std::vector<Instance> _activeInstances;
@@ -268,6 +274,11 @@ private:
 	std::vector<VGM::Buffer> _globalRenderDataBuffers;
 	std::vector<VGM::Buffer> _drawDataIsntanceBuffers;
 	std::vector<VGM::Buffer> _drawIndirectCommandBuffer;
+	
+	std::vector<VGM::Buffer> _instanceIndexBuffers;
+	std::vector<VGM::Buffer> _instanceIndexTransferBuffers;
+
+	std::vector<uint32_t> _instanceIndexTransferCache;
 
 	std::vector<VGM::Buffer> _sunLightBuffers;
 	std::vector<VGM::Buffer> _pointLightBuffers;

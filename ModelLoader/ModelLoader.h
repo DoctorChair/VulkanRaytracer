@@ -44,6 +44,8 @@ class ModelLoader
 public:
 	ModelLoader() = default;
 	ModelData loadModel(const std::string& path);
+	TextureData* getTextureData(const std::string& texture);
+	void freeAssets();
 
 private:
 	void handleNode(aiNode* node, const aiScene* scene, ModelData& model, const std::string& root);

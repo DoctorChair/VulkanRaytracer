@@ -32,6 +32,17 @@ ModelData ModelLoader::loadModel(const std::string& path)
 	return _loadedModels[std::filesystem::path(path).filename().string()];
 }
 
+TextureData* ModelLoader::getTextureData(const std::string& texture)
+{
+	return &_loadedTextures.at(texture);
+}
+
+void ModelLoader::freeAssets()
+{
+	_loadedTextures.clear();
+	_loadedModels.clear();
+}
+
 void ModelLoader::handleNode(aiNode* node, const aiScene* scene, ModelData& model, const std::string& root)
 {
 	for (unsigned int i = 0; i < node->mNumMeshes; i++)
@@ -136,7 +147,9 @@ std::string ModelLoader::getTextureSubPath(aiMaterial* material, aiTextureType t
 
 	aiString string;
 	material->GetTexture(type, 0, &string);
-	texturePath = string.C_Str();
+	
+	if (string.length > 0)
+		texturePath = string.C_Str();
 
 	return texturePath;
 }
@@ -159,9 +172,10 @@ void ModelLoader::loadTextureData(std::string& path)
 			textureData.pixels.resize(textureData.width * textureData.height * textureData.nrChannels);
 			memcpy(textureData.pixels.data(), data, textureData.width * textureData.height * textureData.nrChannels * sizeof(unsigned char));
 			std::cout << "Loaded texture: " << identifier << "\n";
+			_loadedTextures.insert(std::make_pair(identifier, textureData));
 		}
 
-		_loadedTextures.insert(std::make_pair(identifier, textureData));
+		
 	}
 	else return;
 }

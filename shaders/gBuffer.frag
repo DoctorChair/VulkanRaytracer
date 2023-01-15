@@ -1,18 +1,21 @@
 #version 460
 
 //shader input
-layout (location = 0) in vec3 inPos;
+layout (location = 0) in vec3 outPos;
 layout (location = 1) in vec2 texCoords;
-
+layout (location = 2) in flat uint albedoIndex;
+layout (location = 3) in flat uint normalIndex;
+layout (location = 4) in flat uint metallicIndex;
+layout (location = 5) in flat uint roughnessIndex;
 //output write
-layout (location = 0) out vec4 outPosition;
+layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outID;
 layout (location = 3) out vec4 outAlbedo;
 
 layout(set = 1, binding = 0) uniform sampler albedoSampler;
 layout(set = 1, binding = 1) uniform sampler metallicSampler;
-layout(set = 1, binding = 2) uniform sampler normalTSampler;
+layout(set = 1, binding = 2) uniform sampler normalSampler;
 layout(set = 1, binding = 3) uniform sampler roughnessSampler;
 
 layout(set = 3, binding = 0) uniform texture2D textures[1024]; 
@@ -20,7 +23,15 @@ layout(set = 3, binding = 0) uniform texture2D textures[1024];
 void main()
 {
 	//return color
-	vec4 color = texture(sampler2D(textures[0], albedoSampler), texCoords);
-	outPosition = vec4(color);
+	vec4 color = texture(sampler2D(textures[albedoIndex], albedoSampler), texCoords);
+	color.w = 1.0;
+	vec4 normal = texture(sampler2D(textures[normalIndex], normalSampler), texCoords);
+	normal.w = 1.0;
+	vec4 metallic = texture(sampler2D(textures[metallicIndex], metallicSampler), texCoords);
+	metallic.w = 1.0;
+	vec4 rougness = texture(sampler2D(textures[roughnessIndex], roughnessSampler), texCoords);
+	rougness.w = 1.0f;
+
+	outColor = color;
 }
 

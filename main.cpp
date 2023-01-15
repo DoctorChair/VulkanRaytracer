@@ -3,6 +3,8 @@
 #include "Raytracer/Raytracer.h"
 #include "glm/gtc/matrix_transform.hpp"
 
+#include "CameraController.h"
+
 int main(int argc, char* argv[])
 {
 	SDL_Init(SDL_INIT_VIDEO);
@@ -11,34 +13,79 @@ int main(int argc, char* argv[])
 		SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	ModelLoader loader;
-	ModelData mod = loader.loadModel("C:\\Users\\Eric\\Blender\\Starfighter\\Starfighter.obj");
+	
+	//ModelData mod = loader.loadModel("C:\\Users\\Eric\\Blender\\Starfighter\\Starfighter.obj");
+
+	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
+
+	ModelData backpack = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
 
 	Raytracer raytracer;
 	raytracer.init(window);
 
-	Mesh mesh = raytracer.loadMesh(mod.meshes[0].vertices, mod.meshes[0].indices);
-	Mesh mesh2 = raytracer.loadMesh(mod.meshes[3].vertices, mod.meshes[3].indices);
+	std::vector<Mesh> testScene;
+	for(auto& m : sponza.meshes)
+	{
+		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices));
+		if (!m.material.albedo.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.albedo);
+			testScene.back().material.albedoIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.albedo);
+		}
+		if (!m.material.normal.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.normal);
+			testScene.back().material.normalIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.normal);
+		}
+		if (!m.material.metallic.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.metallic);
+			testScene.back().material.metallicIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.metallic);
+		}
+		if (!m.material.roughness.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.roughness);
+			testScene.back().material.roughnessIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.roughness);
+		}
 
-	std::vector<unsigned char> pixels(1024 * 1024, 255);
+		if (testScene.back().material.albedoIndex == 0)
+			int j = 0;
+		
+	}
 
-	uint32_t index = raytracer.loadTexture(pixels, 1024, 1024, 1);
-
-	glm::vec3 position = glm::vec3(1.0f, 0.0f, 10.0f);
-	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
-	glm::vec3 front = glm::vec3(0.0f, 0.0f, -1.0f);
-
-	glm::mat4 view = glm::lookAt(position, position + front, up);
-	glm::mat4 projection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
-	raytracer.setCamera(view, projection, position);
+	loader.freeAssets();
 
 	PointLight point = {};
 	SunLight sun = {};
 	SpotLight spot = {};
 
+	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
+
+	CameraController camera(1000.0f, 10.0f, 90.0f, 1.0f, 0.1f, 1000.0f, up);
+	
+
 	bool quit = false;
 	SDL_Event e;
+
+	uint64_t now = SDL_GetPerformanceCounter();
+	uint64_t last;
+	float deltaTime = 0.0f;
+	
+	int mouseX, mouseY;
+	SDL_GetMouseState(&mouseX, &mouseY);
+	float deltaYaw = 0.0f;
+	float deltaPitch = 0.0f;
+
+	float deltaFront = 0.0f;
+	float deltaRight = 0.0f;
+
 	while (!quit)
 	{
+		last = now;
+		now = SDL_GetPerformanceCounter();
+		deltaTime = ((float)(now - last) * 1000.0f) / (float)SDL_GetPerformanceFrequency();
+		deltaTime = deltaTime * 0.001f;
+
 		//Handle events on queue
 		while (SDL_PollEvent(&e) != 0)
 		{
@@ -47,11 +94,51 @@ int main(int argc, char* argv[])
 			{
 				quit = true;
 			}
+			if (e.type == SDL_MOUSEMOTION)
+			{
+				int x, y;
+				SDL_GetMouseState(&x, &y);
+				deltaYaw = static_cast<float>(mouseX - x);
+				deltaPitch = static_cast<float>(mouseY - y);
+				mouseX = x;
+				mouseY = y;
+			}
+			if(e.type == SDL_KEYDOWN)
+			{
+				switch (e.key.keysym.sym) 
+				{
+				case SDLK_w:
+					deltaFront = 1.0f;
+					break;
+				case SDLK_s:
+					deltaFront = -1.0f;
+					break;
+				}
+			}
+			if (e.type == SDL_KEYUP)
+			{
+				switch (e.key.keysym.sym)
+				{
+				case SDLK_w:
+					deltaFront = 0.0f;
+					break;
+				case SDLK_s:
+					deltaFront = 0.0f;
+					break;
+				}
+			}
 		}
-		glm::mat4 matrix = glm::mat4(10.0f);
 
-		raytracer.drawMesh(mesh, glm::mat4(0.1f), 0);
-		raytracer.drawMesh(mesh2, glm::mat4(0.1f), 0);
+		camera.update(deltaTime, deltaYaw, deltaPitch, 0, deltaFront);
+		raytracer.setCamera(camera._viewMatrix, camera._projectionMatrix, camera._position);
+
+		uint32_t id = 0;
+		for(unsigned int i = 0; i<testScene.size(); i++)
+		{
+			raytracer.drawMesh(testScene[i], glm::mat4(1.0f), id);
+			id++;
+		}
+		
 		raytracer.drawPointLight(point);
 		raytracer.drawSpotLight(spot);
 		raytracer.drawSunLight(sun);

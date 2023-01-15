@@ -81,7 +81,7 @@ void Raytracer::init(SDL_Window* window)
 	initPresentFramebuffers();
 	initMeshBuffer();
 	initTextureArrays();
-	initTLAS();
+	initTLAS();	
 }
 
 Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
@@ -101,11 +101,11 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 
 	vkCreateFence(_vulkan._device, &createInfo, nullptr, &transferFence);
 
-	VGM::Buffer vertexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vertices.size() * sizeof(Vertex), _vulkan._gpuAllocator);
-	VGM::Buffer indexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, indices.size() * sizeof(uint32_t), _vulkan._gpuAllocator);
+	VGM::Buffer vertexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vertices.size() * sizeof(Vertex), _vulkan._generalPurposeAllocator);
+	VGM::Buffer indexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, indices.size() * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
 
-	vertexTransferBuffer.uploadData(vertices.data(), vertices.size() * sizeof(Vertex), _vulkan._gpuAllocator);
-	indexTransferBuffer.uploadData(indices.data(), indices.size() * sizeof(uint32_t), _vulkan._gpuAllocator);
+	vertexTransferBuffer.uploadData(vertices.data(), vertices.size() * sizeof(Vertex), _vulkan._generalPurposeAllocator);
+	indexTransferBuffer.uploadData(indices.data(), indices.size() * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
 
 	_transferCommandBuffer = VGM::CommandBuffer(_transferCommandBufferAllocator, _vulkan._device);
 	_transferCommandBuffer.begin(nullptr, 0, _vulkan._device);
@@ -142,9 +142,15 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 	return mesh;
 }
 
-uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nrChannels)
+uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nrChannels, const std::string& name)
 {
-	VkFormat format;
+	auto it = _loadedImages.find(name);
+	if(it != _loadedImages.end())
+	{
+		return it->second;
+	}
+
+	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 	switch (nrChannels)
 	{
 	case 1:
@@ -166,8 +172,38 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 		return 0;
 	}
 
-	_textures.emplace_back(VGM::Texture(format, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
-		{ width, height, 1 }, 1, _maxMipMapLevels, _vulkan._textureAllocator));
+	VkImageFormatProperties formatProperties;
+	vkGetPhysicalDeviceImageFormatProperties(_vulkan._physicalDevice, format, 
+		VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 
+		0, &formatProperties);
+
+	if (formatProperties.maxExtent.width == 0)
+	{
+		std::vector<unsigned char> extendendPixels(width * height * 4, 255);
+		unsigned int e = 0;
+		for(unsigned int i = 0; i < width * height * nrChannels; i = i + nrChannels)
+		{
+			for(unsigned int j = 0; j < nrChannels; j++)
+			{
+				extendendPixels[e + j] = pixels[i + j];
+			}
+			e = e + 4;
+		}
+
+		format = VK_FORMAT_R8G8B8A8_SRGB;
+
+		_textures.emplace_back(VGM::Texture(format, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+			{ width, height, 1 }, 1, _maxMipMapLevels, _vulkan._textureAllocator));
+
+		pixels = extendendPixels;
+	}
+	else
+	{
+		_textures.emplace_back(VGM::Texture(format, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+			{ width, height, 1 }, 1, _maxMipMapLevels, _vulkan._textureAllocator));
+	}
+
+	
 	VkImageView view;
 	_textures.back().createImageView(0, _maxMipMapLevels, 0, 1, _vulkan._device, &view);
 	_views.push_back(view);
@@ -186,6 +222,9 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 	_transferCommandBuffer = VGM::CommandBuffer(_transferCommandBufferAllocator, _vulkan._device);
 	_transferCommandBuffer.begin(nullptr, 0, _vulkan._device);
 
+	pixelTransferBuffer.cmdMemoryBarrier(_transferCommandBuffer.get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0);
+
 	_textures.back().cmdUploadTextureData(_transferCommandBuffer.get(), 1, 0, pixelTransferBuffer);
 
 	_transferCommandBuffer.end();
@@ -195,35 +234,51 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 	_transferCommandBufferAllocator.reset(_vulkan._device);
 	vkDestroyFence(_vulkan._device, transferFence, nullptr);
 
-	VkDescriptorImageInfo info;
-	info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	info.imageView = _views.back();
+
+	std::vector<VkDescriptorImageInfo> infos(_maxTextureCount);
+	for(unsigned int i = 0; i < _maxTextureCount; i++ )
+	{
+		VkDescriptorImageInfo info;
+		info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		if (i < _textures.size())
+		{
+			info.imageView = _views[i];
+		}
+		else 
+		{
+			info.imageView = _views.back();
+		}
+		info.sampler = VK_NULL_HANDLE;
+
+		infos[i] = info;
+	}
 	
-	//temporary hack
-	VGM::DescriptorSetUpdater::begin(&_textureDescriptorSets[0])
-		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, &info, nullptr, 1, 0, 0)
-		.updateDescriptorSet(_vulkan._device);
+	for (unsigned int i = 0; i < _concurrencyCount; i++)
+	{
+		VGM::DescriptorSetUpdater::begin(&_textureDescriptorSets[i])
+			.bindImage(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, infos.data(), nullptr, infos.size(), 0, 0)
+			.updateDescriptorSet(_vulkan._device);
+	}
+	
 
-	VGM::DescriptorSetUpdater::begin(&_textureDescriptorSets[1])
-		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, &info, nullptr, 1, 0, 0)
-		.updateDescriptorSet(_vulkan._device);
 
-	VGM::DescriptorSetUpdater::begin(&_textureDescriptorSets[2])
-		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, &info, nullptr, 1, 0, 0)
-		.updateDescriptorSet(_vulkan._device);
+	pixelTransferBuffer.destroy(_vulkan._generalPurposeAllocator);
 
-	return _textures.size();
+	_loadedImages.emplace(std::make_pair(name, static_cast<uint32_t>(_textures.size()-1)));
+	return _textures.size()-1;
 }
 
 void Raytracer::drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID)
 {
 	_drawDataTransferCache.push_back({ transform, mesh.material , objectID });
+	_instanceIndexTransferCache.push_back(static_cast<uint32_t>(_instanceIndexTransferCache.size()));
 	VkDrawIndexedIndirectCommand command;
 	command.vertexOffset = mesh.vertexOffset;
 	command.instanceCount = 1;
 	command.indexCount = mesh.indicesCount;
 	command.firstIndex = mesh.indexOffset;
-	command.firstInstance = 0;
+	command.firstInstance = static_cast<uint32_t>(_drawCommandTransferCache.size());
 	_drawCommandTransferCache.push_back(command);
 }
 
@@ -321,7 +376,7 @@ void Raytracer::loadDummyMeshInstance()
 	std::vector<Vertex> vertices = {vertex0, vertex1, vertex2};
 	std::vector<uint32_t> indices = { 0, 1, 2 };
 	std::vector<unsigned char> pixels(128 * 128, 255);
-	uint32_t index = loadTexture(pixels, 128, 128, 1);
+	uint32_t index = loadTexture(pixels, 128, 128, 1, "dummy");
 
 	_dummyMesh = loadMesh(vertices, indices);
 	_dummyMesh.material.albedoIndex = index;
@@ -544,15 +599,30 @@ void Raytracer::drawOffscreen()
 
 	_drawIndirectCommandBuffer[_currentFrameIndex].uploadData(_drawCommandTransferCache.data(),
 		_drawCommandTransferCache.size() * sizeof(VkDrawIndexedIndirectCommand),
-		_vulkan._gpuAllocator);
+		_vulkan._generalPurposeAllocator);
 	_drawDataIsntanceBuffers[_currentFrameIndex].uploadData(_drawDataTransferCache.data(),
 		_drawDataTransferCache.size() * sizeof(DrawData),
-		_vulkan._gpuAllocator);
+		_vulkan._generalPurposeAllocator);
 	
+	_instanceIndexTransferBuffers[_currentFrameIndex] .uploadData(_instanceIndexTransferCache.data(),
+		_instanceIndexTransferCache.size() * sizeof(uint32_t),
+		_vulkan._generalPurposeAllocator);
+
 	_drawIndirectCommandBuffer[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
 	_drawDataIsntanceBuffers[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
+	_instanceIndexTransferBuffers[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
+
+	VkBufferCopy copy = {};
+	copy.dstOffset = 0;
+	copy.srcOffset = 0;
+	copy.size = _instanceIndexTransferCache.size() * sizeof(uint32_t);
+	_instanceIndexBuffers[_currentFrameIndex].cmdCopyBuffer(offscreenCmd->get(), _instanceIndexTransferBuffers[_currentFrameIndex].get(), 1, &copy);
+
+	_instanceIndexBuffers[_currentFrameIndex].cmdMemoryBarrier(offscreenCmd->get(), VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0);
 
 	CameraData camData = {};
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
@@ -584,9 +654,11 @@ void Raytracer::drawOffscreen()
 	
 
 	vkCmdBindIndexBuffer(offscreenCmd->get(), _meshBuffer.indices.get(), 0, VK_INDEX_TYPE_UINT32);
-	VkDeviceSize offset = 0;
-	VkBuffer vertexBuffer = _meshBuffer.vertices.get();
-	vkCmdBindVertexBuffers(offscreenCmd->get(), 0, 1, &vertexBuffer, &offset);
+	
+	VkDeviceSize offsets[] = { 0, 0};
+	VkBuffer vertexBuffers[] = { _meshBuffer.vertices.get(), _instanceIndexBuffers[_currentFrameIndex].get() };
+	vkCmdBindVertexBuffers(offscreenCmd->get(), 0, 2, vertexBuffers, offsets);
+		
 	vkCmdDrawIndexedIndirect(offscreenCmd->get(), currentDrawIndirectBuffer->get(), 0, (uint32_t)_drawCommandTransferCache.size(), sizeof(VkDrawIndexedIndirectCommand));
 
 	currentGBuffer->framebuffer.cmdEndRendering(offscreenCmd->get());
@@ -603,6 +675,7 @@ void Raytracer::drawOffscreen()
 
 	_drawCommandTransferCache.clear();
 	_drawDataTransferCache.clear();
+	_instanceIndexTransferCache.clear();
 }
 
 void Raytracer::renderDeffered()
@@ -985,6 +1058,7 @@ void Raytracer::initGBufferShader()
 	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 1.0f, 0.0f, 0.0f);
 	configurator.setScissorState(windowWidth, windowHeight, 0.0f, 0.0f);
 	configurator.setInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	configurator.setBackfaceCulling(VK_CULL_MODE_NONE);
 	configurator.setColorBlendingState(colorBlendAttachments);
 	configurator.setDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
 	
@@ -995,6 +1069,8 @@ void Raytracer::initGBufferShader()
 	configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32B32_SFLOAT, 8 * sizeof(float)); //tangent
 	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //bitangant
 	configurator.addVertexInputInputBindingDescription(0, 14 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
+	configurator.addVertexAttribInputDescription(5, 1, VK_FORMAT_R32_UINT, 0);
+	configurator.addVertexInputInputBindingDescription(1, sizeof(uint32_t), VK_VERTEX_INPUT_RATE_INSTANCE);
 
 	_gBufferShader = VGM::ShaderProgram(sources, _gBufferPipelineLayout, configurator, _vulkan._device, 4);
 }
@@ -1166,6 +1242,8 @@ void Raytracer::initDataBuffers()
 	_cameraBuffers.resize(_concurrencyCount);
 	_globalRenderDataBuffers.resize(_concurrencyCount);
 	_drawIndirectCommandBuffer.resize(_concurrencyCount);
+	_instanceIndexBuffers.resize(_concurrencyCount);
+	_instanceIndexTransferBuffers.resize(_concurrencyCount);
 
 	for(unsigned int i = 0; i<_concurrencyCount; i++)
 	{
@@ -1173,7 +1251,11 @@ void Raytracer::initDataBuffers()
 		_drawIndirectCommandBuffer[i] = VGM::Buffer(VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, _maxDrawCount * sizeof(VkDrawIndexedIndirectCommand), _vulkan._generalPurposeAllocator);
 		_cameraBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(globalRenderData), _vulkan._generalPurposeAllocator);
+		_instanceIndexBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, _maxDrawCount * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
+		_instanceIndexTransferBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, _maxDrawCount * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
 	}
+
+	
 }
 
 void Raytracer::initLightBuffers()

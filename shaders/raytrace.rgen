@@ -65,7 +65,7 @@ void main()
           0               // payload (location = 0)
   );*/
 
-    vec4 outColor = samplePosition;
+    vec4 outColor = color;
     outColor.w = 1.0f;
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }
