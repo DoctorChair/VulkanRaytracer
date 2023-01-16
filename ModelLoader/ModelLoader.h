@@ -32,6 +32,8 @@ struct MeshData
 	std::vector<uint32_t> indices;
 
 	pbrMaterialData material;
+
+	std::string name;
 };
 
 struct ModelData

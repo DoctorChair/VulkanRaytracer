@@ -11,14 +11,14 @@ CameraController::CameraController(float translationSpeed, float rotationSensiti
 
 void CameraController::update(float deltaTime, float yawDelta, float pitchDelta, float deltaRight, float deltaFront)
 {
-	if (abs(yawDelta) < 0.01f)
-		yawDelta = 0.0f;
-	if (abs(pitchDelta) < 0.01f)
-		pitchDelta = 0.0f;
+	glm::vec2 deltaVector = glm::vec2(yawDelta, pitchDelta);
 
-	_angles = _angles + glm::vec2(yawDelta, pitchDelta) * _rotationSpeed * deltaTime;
+	if (glm::length(deltaVector) < 2.0f)
+	{
+		deltaVector = glm::vec2(0.0f);
+	}
+	_angles = _angles + deltaVector * _rotationSpeed * deltaTime;
 	
-
 	if (_angles.y >= 90.0f)
 		_angles.y = 89.0f;
 	if (_angles.y <= -90.0f)

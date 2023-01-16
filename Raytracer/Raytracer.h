@@ -27,14 +27,12 @@ struct GBuffer
 {
 	VGM::Framebuffer framebuffer;
 
-	VGM::Texture positionBuffer;
-	VkImageView positionView;
+	VGM::Texture colorBuffer;
+	VkImageView colorView;
 	VGM::Texture normalBuffer;
 	VkImageView normalView;
 	VGM::Texture idBuffer;
 	VkImageView idView;
-	VGM::Texture albedoBuffer;
-	VkImageView albedoView;
 	VGM::Texture depthBuffer;
 	VkImageView depthView;
 };
@@ -128,10 +126,17 @@ struct FrameSynchro
 	VkSemaphore _defferedRenderSemaphore;
 	VkSemaphore _raytraceSemaphore;
 	VkSemaphore _compositingSemaphore;
+	
 	VkFence _offsrceenRenderFence;
 	VkFence _defferedRenderFence;
 	VkFence _raytraceFence;
 	VkFence _compositingFence;
+
+	VkEvent _offscreenFinishedEvent;
+	VkEvent _defferedFinishedEvent;
+	VkEvent _raytraceFinishedEvent;
+	VkEvent _compositeFinishedEvent;
+
 };
 
 struct SunLight
@@ -164,7 +169,7 @@ public:
 	Raytracer() = default;
 	void init(SDL_Window* window);
 
-	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
+	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const std::string& name);
 	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels, const std::string& name);
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
@@ -208,6 +213,10 @@ private:
 	void traceRays();
 	void composit();
 
+	void executeDefferedPass();
+	void executeRaytracePass();
+	void executeCompositPass();
+
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
 	VGM::VulkanContext _vulkan;
@@ -217,7 +226,7 @@ private:
 	uint32_t _concurrencyCount = 3;
 	uint32_t _maxDrawCount = 1000;
 	uint32_t _maxTextureCount = 1024;
-	uint32_t _maxTriangleCount = 10000000;
+	uint32_t _maxTriangleCount = 12000000;
 	uint32_t _maxMipMapLevels = 1;
 	uint64_t _timeout = 100000000;
 	uint32_t _maxSunLights = 10;
@@ -228,7 +237,8 @@ private:
 	std::vector<VkImageView> _views;
 	std::unordered_map<std::string, uint32_t> _loadedImages;
 
-	std::vector<Mesh> _loadedMeshes;
+	std::vector<Mesh> _meshes;
+	std::unordered_map<std::string, uint32_t> _loadedMeshes;
 	std::vector<Instance> _activeInstances;
 
 	MeshBuffer _meshBuffer;

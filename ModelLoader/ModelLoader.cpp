@@ -138,6 +138,8 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 		meshData.material.roughness = std::filesystem::path(subpath).filename().string();
 	}
 
+	meshData.name = mesh->mName.C_Str();
+
 	return meshData;
 }
 
@@ -174,8 +176,6 @@ void ModelLoader::loadTextureData(std::string& path)
 			std::cout << "Loaded texture: " << identifier << "\n";
 			_loadedTextures.insert(std::make_pair(identifier, textureData));
 		}
-
-		
 	}
 	else return;
 }

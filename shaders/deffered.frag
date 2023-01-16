@@ -7,9 +7,9 @@ layout (location = 0) in vec2 texCoord;
 layout (location = 0) out vec4 outColor;
 
 
-layout(set = 0, binding = 0) uniform sampler2D albedo;
-layout(set = 0, binding = 1) uniform sampler2D position;
+layout(set = 0, binding = 0) uniform sampler2D inColor;
 layout(set = 0, binding = 2) uniform sampler2D normal;
+layout(set = 0, binding = 1) uniform sampler2D depth;
 layout(set = 0, binding = 3) uniform sampler2D ID;
 
 struct SunLight
@@ -55,7 +55,7 @@ layout(std140,set = 1, binding = 2) readonly buffer SpotBuffer{
 void main()
 {
 	//return color
-    vec3 color = texture(position, texCoord).xyz;
+    vec3 color = texture(inColor, texCoord).xyz;
 	outColor = vec4(color, 1.0f);
 }
 

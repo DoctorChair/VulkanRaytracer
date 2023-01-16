@@ -12,22 +12,28 @@ int main(int argc, char* argv[])
 		1024, 1024,
 		SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
+	Raytracer raytracer;
+	raytracer.init(window);
+
 	ModelLoader loader;
 	
 	//ModelData mod = loader.loadModel("C:\\Users\\Eric\\Blender\\Starfighter\\Starfighter.obj");
 
 	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
 
-	ModelData backpack = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
+	//ModelData backpack = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
 
-	Raytracer raytracer;
-	raytracer.init(window);
+	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
+
+	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_002.gltf");
+
+	int i = 0;
 
 	std::vector<Mesh> testScene;
 	for(auto& m : sponza.meshes)
 	{
-		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices));
-		if (!m.material.albedo.empty())
+		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices, m.name));
+		/*if (!m.material.albedo.empty())
 		{
 			TextureData* data = loader.getTextureData(m.material.albedo);
 			testScene.back().material.albedoIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.albedo);
@@ -46,11 +52,7 @@ int main(int argc, char* argv[])
 		{
 			TextureData* data = loader.getTextureData(m.material.roughness);
 			testScene.back().material.roughnessIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.roughness);
-		}
-
-		if (testScene.back().material.albedoIndex == 0)
-			int j = 0;
-		
+		}*/
 	}
 
 	loader.freeAssets();
@@ -61,7 +63,7 @@ int main(int argc, char* argv[])
 
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
-	CameraController camera(1000.0f, 10.0f, 90.0f, 1.0f, 0.1f, 1000.0f, up);
+	CameraController camera(1000.0f, 50.0f, 90.0f, 1.0f, 0.1f, 2000.0f, up);
 	
 
 	bool quit = false;
@@ -113,6 +115,12 @@ int main(int argc, char* argv[])
 				case SDLK_s:
 					deltaFront = -1.0f;
 					break;
+				case SDLK_d:
+					deltaRight = 1.0f;
+					break;
+				case SDLK_a:
+					deltaRight = -1.0f;
+					break;
 				}
 			}
 			if (e.type == SDL_KEYUP)
@@ -125,11 +133,17 @@ int main(int argc, char* argv[])
 				case SDLK_s:
 					deltaFront = 0.0f;
 					break;
+				case SDLK_d:
+					deltaRight = 0.0f;
+					break;
+				case SDLK_a:
+					deltaRight = 0.0f;
+					break;
 				}
 			}
 		}
 
-		camera.update(deltaTime, deltaYaw, deltaPitch, 0, deltaFront);
+		camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
 		raytracer.setCamera(camera._viewMatrix, camera._projectionMatrix, camera._position);
 
 		uint32_t id = 0;

@@ -11,7 +11,6 @@ layout (location = 5) in flat uint roughnessIndex;
 layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outID;
-layout (location = 3) out vec4 outAlbedo;
 
 layout(set = 1, binding = 0) uniform sampler albedoSampler;
 layout(set = 1, binding = 1) uniform sampler metallicSampler;
@@ -24,14 +23,13 @@ void main()
 {
 	//return color
 	vec4 color = texture(sampler2D(textures[albedoIndex], albedoSampler), texCoords);
-	color.w = 1.0;
 	vec4 normal = texture(sampler2D(textures[normalIndex], normalSampler), texCoords);
-	normal.w = 1.0;
 	vec4 metallic = texture(sampler2D(textures[metallicIndex], metallicSampler), texCoords);
-	metallic.w = 1.0;
 	vec4 rougness = texture(sampler2D(textures[roughnessIndex], roughnessSampler), texCoords);
-	rougness.w = 1.0f;
+	
 
 	outColor = color;
+	outNormal = normal;
+	outID = vec4(0.0, 0.0, 0.0, 1.0);
 }
 
