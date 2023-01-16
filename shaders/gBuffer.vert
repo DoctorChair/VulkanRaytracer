@@ -49,14 +49,14 @@ layout(std430, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 
 void main()
 {
-	mat4 model = mat4(1.0f);//drawData.instanceData[gl_InstanceIndex].modelMatrix;
+	mat4 model = drawData.instanceData[instanceIndex].modelMatrix;
 	mat4 view = cameraData.viewMatrix;
 	mat4 projection = cameraData.projectionMatrix;
 
-	albedoIndex = drawData.instanceData[gl_InstanceIndex].material.albedoIndex;
-	normalIndex = drawData.instanceData[gl_InstanceIndex].material.normalIndex;
-	metallicIndex = drawData.instanceData[gl_InstanceIndex].material.metallicIndex;
-	roughnessIndex = drawData.instanceData[gl_InstanceIndex].material.roughnessIndex;
+	albedoIndex = drawData.instanceData[instanceIndex].material.albedoIndex;
+	normalIndex = drawData.instanceData[instanceIndex].material.normalIndex;
+	metallicIndex = drawData.instanceData[instanceIndex].material.metallicIndex;
+	roughnessIndex = drawData.instanceData[instanceIndex].material.roughnessIndex;
 
 	outPos = ( cameraData.projectionMatrix * cameraData.viewMatrix * vec4(vertexPos, 1.0f)).xyz;
 	texCoords = texCoord;
