@@ -132,11 +132,8 @@ struct FrameSynchro
 	VkFence _raytraceFence;
 	VkFence _compositingFence;
 
-	VkEvent _offscreenFinishedEvent;
 	VkEvent _defferedFinishedEvent;
 	VkEvent _raytraceFinishedEvent;
-	VkEvent _compositeFinishedEvent;
-
 };
 
 struct SunLight

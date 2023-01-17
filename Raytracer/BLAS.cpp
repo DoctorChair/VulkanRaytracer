@@ -57,7 +57,7 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 	accelInfo.buffer = _blasBuffer.get();
 	accelInfo.size = buildSize.accelerationStructureSize;
 
-	vkCreateAccelerationStructureKHR(device, &accelInfo, nullptr, &_blas);
+	VkResult r = vkCreateAccelerationStructureKHR(device, &accelInfo, nullptr, &_blas);
 
 	build.dstAccelerationStructure = _blas;
 

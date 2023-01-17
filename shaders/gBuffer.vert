@@ -7,8 +7,6 @@ layout (location = 2) in vec3 normal;
 layout (location = 3) in vec3 tangent;
 layout (location = 4) in vec3 bitangent;
 
-layout (location = 5) in uint instanceIndex;
-
 layout (location = 0) out vec3 outPos;
 layout (location = 1) out vec2 texCoords;
 layout (location = 2) out flat uint albedoIndex;
@@ -49,14 +47,14 @@ layout(std430, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 
 void main()
 {
-	mat4 model = drawData.instanceData[instanceIndex].modelMatrix;
+	mat4 model = drawData.instanceData[gl_InstanceIndex].modelMatrix;
 	mat4 view = cameraData.viewMatrix;
 	mat4 projection = cameraData.projectionMatrix;
 
-	albedoIndex = drawData.instanceData[instanceIndex].material.albedoIndex;
-	normalIndex = drawData.instanceData[instanceIndex].material.normalIndex;
-	metallicIndex = drawData.instanceData[instanceIndex].material.metallicIndex;
-	roughnessIndex = drawData.instanceData[instanceIndex].material.roughnessIndex;
+	albedoIndex = drawData.instanceData[gl_InstanceIndex].material.albedoIndex;
+	normalIndex = drawData.instanceData[gl_InstanceIndex].material.normalIndex;
+	metallicIndex = drawData.instanceData[gl_InstanceIndex].material.metallicIndex;
+	roughnessIndex = drawData.instanceData[gl_InstanceIndex].material.roughnessIndex;
 
 	outPos = ( cameraData.projectionMatrix * cameraData.viewMatrix * vec4(vertexPos, 1.0f)).xyz;
 	texCoords = texCoord;
