@@ -97,12 +97,12 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 
 	for(unsigned int i = 0; i<mesh->mNumFaces; i++)
 	{
-		for(unsigned int j = 0; j<mesh->mFaces[j].mNumIndices; j++)
+		for(unsigned int j = 0; j<mesh->mFaces[i].mNumIndices; j++)
 		{
 			meshData.indices.push_back(mesh->mFaces[i].mIndices[j]);
 		}
 	}
-	
+
 	unsigned int materialIndex = mesh->mMaterialIndex;
 	aiMaterial* material = scene->mMaterials[materialIndex];
 
@@ -165,7 +165,7 @@ void ModelLoader::loadTextureData(std::string& path)
 	{
 		path = std::regex_replace(path, std::regex("/"), "\\");
 		int width, height, nrChannels;
-		unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
+			unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
 		if(data != nullptr)
 		{
 			textureData.height = static_cast<unsigned int>(height);
@@ -177,5 +177,6 @@ void ModelLoader::loadTextureData(std::string& path)
 			_loadedTextures.insert(std::make_pair(identifier, textureData));
 		}
 	}
+	
 	else return;
 }

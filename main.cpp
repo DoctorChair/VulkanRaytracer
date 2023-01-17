@@ -19,23 +19,22 @@ int main(int argc, char* argv[])
 	
 	//ModelData mod = loader.loadModel("C:\\Users\\Eric\\Blender\\Starfighter\\Starfighter.obj");
 
-	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
+	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
 
 	//ModelData backpack = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
 
 	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
 
-	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_002.gltf");
+	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_002.gltf");
 
 	int i = 0;
 
 	std::vector<Mesh> testScene;
 	for(auto& m : sponza.meshes)
 	{
-		std::cout << m.vertices.size() << "    " << m.indices.size() << std::endl;
- 		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices, m.name));
+		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices, m.name));
 		
-		/*if (!m.material.albedo.empty())
+		if (!m.material.albedo.empty())
 		{
 			TextureData* data = loader.getTextureData(m.material.albedo);
 			testScene.back().material.albedoIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.albedo);
@@ -54,7 +53,8 @@ int main(int argc, char* argv[])
 		{
 			TextureData* data = loader.getTextureData(m.material.roughness);
 			testScene.back().material.roughnessIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.roughness);
-		}*/
+		}
+	
 	}
 
 	loader.freeAssets();

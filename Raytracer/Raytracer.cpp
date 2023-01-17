@@ -122,38 +122,50 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 	indexTransferBuffer.cmdMemoryBarrier(_transferCommandBuffer.get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0);
 
-	_meshBuffer.vertices.cmdAppendCopyBuffer(_transferCommandBuffer.get(), 
-		vertexTransferBuffer.get(), vertices.size() * sizeof(Vertex), 0);
-	_meshBuffer.indices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
+		_meshBuffer.vertices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
+		vertexTransferBuffer.get(), vertices.size() * sizeof(Vertex), 0); 
+		_meshBuffer.indices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
 		indexTransferBuffer.get(), indices.size() * sizeof(uint32_t), 0);
 
 	_transferCommandBuffer.end();
-	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
-	_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
+	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_NONE };
+	VkResult r = _transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
 	
-	VkResult r = vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
+	if (r != VK_SUCCESS)
+		throw std::runtime_error("Queue corrupted!\n");
+
+	r = vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
 	r = vkResetFences(_vulkan._device, 1, &transferFence);
+
+	if (r != VK_SUCCESS)
+		throw std::runtime_error("Queue corrupted!\n");
 
 	VkDeviceAddress vertexAddress = _meshBuffer.vertices.getDeviceAddress(_vulkan._device);
 	VkDeviceAddress indexAddress = _meshBuffer.indices.getDeviceAddress(_vulkan._device);
 
 	_raytraceBuildCommandBuffer.begin(nullptr, 0, _vulkan._device);
 
-	_accelerationStructure.bottomLevelAccelStructures.emplace_back(BLAS(vertexAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(Vertex),
+	_accelerationStructure.bottomLevelAccelStructures.emplace_back(BLAS(vertexAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, sizeof(Vertex),
 		VK_INDEX_TYPE_UINT32, mesh.vertexCount - 1, mesh.vertexOffset, mesh.indicesCount, mesh.indexOffset,
 		_vulkan._device, _vulkan._meshAllocator, _raytraceBuildCommandBuffer.get()));
 
 	_raytraceBuildCommandBuffer.end();
 	r = _raytraceBuildCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._computeQueue);
 	
+	if (r != VK_SUCCESS)
+		throw std::runtime_error("Queue corrupted!\n");
 	
 	r = vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
 	r = vkResetFences(_vulkan._device, 1, &transferFence);
 
+	if (r != VK_SUCCESS)
+		throw std::runtime_error("Queue corrupted!\n");
 
 	vkDestroyFence(_vulkan._device, transferFence, nullptr);
 
 	mesh.blasIndex = _accelerationStructure.bottomLevelAccelStructures.size() - 1;
+
+	_transferCommandBufferAllocator.reset(_vulkan._device);
 
 	_meshes.push_back(mesh);
 	_loadedMeshes.insert(std::make_pair(name, _meshes.size() - 1));

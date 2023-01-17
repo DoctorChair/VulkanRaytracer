@@ -26,7 +26,7 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 	VkAccelerationStructureBuildRangeInfoKHR range = {};
 	range.firstVertex = VertexOffset;
 	range.primitiveCount = IndicesCount / 3;
-	range.primitiveOffset = IndicesOffeset;
+	range.primitiveOffset = IndicesOffeset * sizeof(uint32_t);
 	range.transformOffset = 0;
 
 	VkAccelerationStructureBuildGeometryInfoKHR build = {};
