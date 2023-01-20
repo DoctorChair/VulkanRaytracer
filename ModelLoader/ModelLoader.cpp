@@ -1,11 +1,14 @@
 #include "ModelLoader.h"
 #include <filesystem>
 #include <regex>
+#include <thread>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 #include <iostream>
+
+#include "TextureLoader.h"
 
 ModelData ModelLoader::loadModel(const std::string& path)
 {
@@ -19,12 +22,41 @@ ModelData ModelLoader::loadModel(const std::string& path)
 		if (scene != nullptr)
 		{
 			std::string root = std::filesystem::path(path).parent_path().string();
-			handleNode(scene->mRootNode, scene, modelData, root);
+
+			std::unordered_map<std::string, TextureData> diffuseTextures;
+			std::unordered_map<std::string, TextureData> normalTextures;
+			std::unordered_map<std::string, TextureData> metallicTextures;
+			std::unordered_map<std::string, TextureData> roughnessTextures;
+			std::thread diffuseLoadThread(TextureLoader(), scene, root, aiTextureType_DIFFUSE, &diffuseTextures);
+			std::thread normalLoadThread(TextureLoader(), scene, root, aiTextureType_NORMALS, &normalTextures);
+			std::thread metallicLoadThread(TextureLoader(), scene, root, aiTextureType_METALNESS, &metallicTextures);
+			std::thread roughnessoadThread(TextureLoader(), scene, root, aiTextureType_DIFFUSE_ROUGHNESS, &roughnessTextures);
+
+			diffuseLoadThread.join();
+			normalLoadThread.join();
+			metallicLoadThread.join();
+			roughnessoadThread.join();
+
+			_loadedTextures.merge(diffuseTextures);
+			_loadedTextures.merge(normalTextures);
+			_loadedTextures.merge(metallicTextures);
+			_loadedTextures.merge(roughnessTextures);
+
+			aiMatrix4x4 t = scene->mRootNode->mTransformation;
+			glm::mat4 matrix;
+			matrix[0] = { t.a1, t.b1, t.c1, t.d1 };
+			matrix[1] = { t.a2, t.b2, t.c2, t.d2 };
+			matrix[2] = { t.a3, t.b3, t.c3, t.d3 };
+			matrix[3] = { t.a4, t.b4, t.c4, t.d4 };
+
+			handleNode(scene->mRootNode, scene, modelData, root, matrix);
 		}
 		else
 		{
 			return modelData;
 		}
+
+		
 
 		_loadedModels.insert(std::make_pair(std::filesystem::path(path).filename().string(), modelData));
 	}
@@ -43,27 +75,39 @@ void ModelLoader::freeAssets()
 	_loadedModels.clear();
 }
 
-void ModelLoader::handleNode(aiNode* node, const aiScene* scene, ModelData& model, const std::string& root)
+void ModelLoader::handleNode(aiNode* node, const aiScene* scene, ModelData& model, const std::string& root, glm::mat4 transfrom)
 {
+	aiMatrix4x4 t = node->mTransformation;
+	glm::mat4 matrix;
+	matrix[0] = { t.a1, t.b1, t.c1, t.d1 };
+	matrix[1] = { t.a2, t.b2, t.c2, t.d2 };
+	matrix[2] = { t.a3, t.b3, t.c3, t.d3 };
+	matrix[3] = { t.a4, t.b4, t.c4, t.d4 };
+
+	transfrom = transfrom * matrix;
+
 	for (unsigned int i = 0; i < node->mNumMeshes; i++)
 	{
 		unsigned int index = node->mMeshes[i];
-		MeshData meshData = copyMeshData(scene->mMeshes[index], scene, root);
+
+		MeshData meshData = copyMeshData(scene->mMeshes[index], scene, root, transfrom);
 		model.meshes.push_back(meshData);
 	}
 
-	for(unsigned int i = 0; i<node->mNumChildren; i++)
+	for (unsigned int i = 0; i < node->mNumChildren; i++)
 	{
-		handleNode(node->mChildren[i], scene, model, root);
+		handleNode(node->mChildren[i], scene, model, root, transfrom);
 	}
 }
 
-MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std::string& root)
+MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std::string& root, glm::mat4 transform)
 {
 	MeshData meshData;
 	meshData.vertices.resize(mesh->mNumVertices);
 
-	for(unsigned int i = 0; i<mesh->mNumVertices; i++)
+	meshData.transform = transform;
+
+	for (unsigned int i = 0; i < mesh->mNumVertices; i++)
 	{
 		Vertex vertex;
 
@@ -77,7 +121,7 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 			vertex.texCoord.y = mesh->mTextureCoords[0][i].y;
 		}
 
-		if(mesh->HasTangentsAndBitangents())
+		if (mesh->HasTangentsAndBitangents())
 		{
 			vertex.normal.x = mesh->mNormals[i].x;
 			vertex.normal.y = mesh->mNormals[i].y;
@@ -86,7 +130,7 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 			vertex.tangent.x = mesh->mTangents[i].x;
 			vertex.tangent.y = mesh->mTangents[i].y;
 			vertex.tangent.z = mesh->mTangents[i].z;
-			
+
 			vertex.bitangent.x = mesh->mBitangents[i].x;
 			vertex.bitangent.y = mesh->mBitangents[i].y;
 			vertex.bitangent.z = mesh->mBitangents[i].z;
@@ -95,9 +139,9 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 		meshData.vertices[i] = vertex;
 	}
 
-	for(unsigned int i = 0; i<mesh->mNumFaces; i++)
+	for (unsigned int i = 0; i < mesh->mNumFaces; i++)
 	{
-		for(unsigned int j = 0; j<mesh->mFaces[i].mNumIndices; j++)
+		for (unsigned int j = 0; j < mesh->mFaces[i].mNumIndices; j++)
 		{
 			meshData.indices.push_back(mesh->mFaces[i].mIndices[j]);
 		}
@@ -106,35 +150,27 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 	unsigned int materialIndex = mesh->mMaterialIndex;
 	aiMaterial* material = scene->mMaterials[materialIndex];
 
-	std::string subpath= getTextureSubPath(material, aiTextureType_DIFFUSE);
-	if(subpath != "")
+	std::string subpath = getTextureSubPath(material, aiTextureType_DIFFUSE);
+	if (subpath != "")
 	{
-		std::string path = root + "/" + subpath;
-		loadTextureData(path);
 		meshData.material.albedo = std::filesystem::path(subpath).filename().string();
 	}
 
 	subpath = getTextureSubPath(material, aiTextureType_METALNESS);
 	if (subpath != "")
 	{
-		std::string path = root + "/" + subpath;
-		loadTextureData(path);
 		meshData.material.metallic = std::filesystem::path(subpath).filename().string();
 	}
 
 	subpath = getTextureSubPath(material, aiTextureType_NORMALS);
 	if (subpath != "")
 	{
-		std::string path = root + "/" + subpath;
-		loadTextureData(path);
 		meshData.material.normal = std::filesystem::path(subpath).filename().string();
 	}
 
 	subpath = getTextureSubPath(material, aiTextureType_DIFFUSE_ROUGHNESS);
 	if (subpath != "")
 	{
-		std::string path = root + "/" + subpath;
-		loadTextureData(path);
 		meshData.material.roughness = std::filesystem::path(subpath).filename().string();
 	}
 
@@ -149,34 +185,9 @@ std::string ModelLoader::getTextureSubPath(aiMaterial* material, aiTextureType t
 
 	aiString string;
 	material->GetTexture(type, 0, &string);
-	
+
 	if (string.length > 0)
 		texturePath = string.C_Str();
 
 	return texturePath;
-}
-
-void ModelLoader::loadTextureData(std::string& path)
-{
-	TextureData textureData;
-
-	std::string identifier = std::filesystem::path(path).filename().string();
-	if (_loadedTextures.find(identifier) == _loadedTextures.end())
-	{
-		path = std::regex_replace(path, std::regex("/"), "\\");
-		int width, height, nrChannels;
-			unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
-		if(data != nullptr)
-		{
-			textureData.height = static_cast<unsigned int>(height);
-			textureData.width = static_cast<unsigned int>(width);
-			textureData.nrChannels = static_cast<unsigned int>(nrChannels);
-			textureData.pixels.resize(textureData.width * textureData.height * textureData.nrChannels);
-			memcpy(textureData.pixels.data(), data, textureData.width * textureData.height * textureData.nrChannels * sizeof(unsigned char));
-			std::cout << "Loaded texture: " << identifier << "\n";
-			_loadedTextures.insert(std::make_pair(identifier, textureData));
-		}
-	}
-	
-	else return;
 }

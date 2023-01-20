@@ -19,13 +19,13 @@ int main(int argc, char* argv[])
 	
 	//ModelData mod = loader.loadModel("C:\\Users\\Eric\\Blender\\Starfighter\\Starfighter.obj");
 
-	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
+	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
 
 	//ModelData backpack = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
 
 	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
 
-	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_002.gltf");
+	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_002.gltf");
 
 	int i = 0;
 
@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
 
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
-	CameraController camera(1000.0f, 50.0f, 90.0f, 1.0f, 0.1f, 2000.0f, up);
+	CameraController camera(10.0f, 20.0f, 90.0f, 1.0f, 0.1f, 100.0f, up);
 	
 
 	bool quit = false;
@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
 		uint32_t id = 0;
 		for(unsigned int i = 0; i<testScene.size(); i++)
 		{
-			raytracer.drawMesh(testScene[i], glm::mat4(1.0f), id);
+			raytracer.drawMesh(testScene[i], sponza.meshes[i].transform, id);
 			id++;
 		}
 		

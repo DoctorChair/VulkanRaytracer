@@ -11,6 +11,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 add_library(${PROJECT_NAME}
 ModelLoader.h
 ModelLoader.cpp
+TextureLoader.h
+TextureLoader.cpp
+DataStructs.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

@@ -35,6 +35,8 @@ struct GBuffer
 	VkImageView idView;
 	VGM::Texture depthBuffer;
 	VkImageView depthView;
+	VGM::Texture roughnessMetalnessBuffer;
+	VkImageView roughnessMetalnessView;
 };
 
 struct DefferedBuffer

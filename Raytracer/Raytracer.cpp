@@ -408,8 +408,8 @@ void Raytracer::loadDummyMeshInstance()
 	vertex2.position = { 0.0f, 1.0f, 0.0f };
 	std::vector<Vertex> vertices = {vertex0, vertex1, vertex2};
 	std::vector<uint32_t> indices = { 0, 1, 2 };
-	std::vector<unsigned char> pixels(128 * 128, 255);
-	uint32_t index = loadTexture(pixels, 128, 128, 1, "dummy");
+	std::vector<unsigned char> pixels(128 * 128 * 4, 0);
+	uint32_t index = loadTexture(pixels, 128, 128, 4, "dummy");
 
 	_dummyMesh = loadMesh(vertices, indices, "dummy");
 	_dummyMesh.material.albedoIndex = index;
@@ -537,10 +537,15 @@ void Raytracer::updateDefferedDescriptorSets()
 	depthInfo.imageView = currentGBuffer->depthView;
 	depthInfo.sampler = _defferedShader.getSamplers()[2];
 
+	VkDescriptorImageInfo roughnessMetalnessInfo;
+	roughnessMetalnessInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	roughnessMetalnessInfo.imageView = currentGBuffer->roughnessMetalnessView;
+	roughnessMetalnessInfo.sampler = _defferedShader.getSamplers()[3];
+
 	VkDescriptorImageInfo idInfo;
 	idInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	idInfo.imageView = currentGBuffer->idView;
-	idInfo.sampler = _defferedShader.getSamplers()[3];
+	idInfo.sampler = _defferedShader.getSamplers()[4];
 
 	VkDescriptorBufferInfo sunInfo = {};
 	sunInfo.buffer = currentSunLightBuffer->get();
@@ -563,7 +568,8 @@ void Raytracer::updateDefferedDescriptorSets()
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &albedoInfo, nullptr, 1, 0, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normalInfo, nullptr, 1, 0, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depthInfo, nullptr, 1, 0, 2)
-		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &idInfo, nullptr, 1, 0, 3)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &roughnessMetalnessInfo, nullptr, 1, 0, 3)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &idInfo, nullptr, 1, 0, 4)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, sunInfo, 1, 1, 0)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, pointInfo, 1, 1, 1)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, spotInfo, 1, 1, 2)
@@ -699,6 +705,9 @@ void Raytracer::executeDefferedPass()
 	currentGBuffer->colorBuffer.cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
+	currentGBuffer->roughnessMetalnessBuffer.cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
 	currentGBuffer->idBuffer.cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
@@ -733,6 +742,11 @@ void Raytracer::executeDefferedPass()
 	currentGBuffer->colorBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	currentGBuffer->roughnessMetalnessBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	currentGBuffer->idBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,
@@ -917,16 +931,21 @@ void Raytracer::initgBuffers()
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		g.colorBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
+		g.roughnessMetalnessBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		g.depthBuffer = VGM::Texture(VK_FORMAT_D32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 
-		VkClearColorValue clear = { 0.0f, 1.0f, 0.0f };
+		VkClearColorValue clear = { 1.0f, 1.0f, 1.0f };
 
 		g.colorBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.colorView);
 		g.framebuffer.bindColorTextureTarget(g.colorView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
 
 		g.normalBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.normalView);
 		g.framebuffer.bindColorTextureTarget(g.normalView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
+
+		g.roughnessMetalnessBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.roughnessMetalnessView);
+		g.framebuffer.bindColorTextureTarget(g.roughnessMetalnessView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
 
 		g.idBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.idView);
 		g.framebuffer.bindColorTextureTarget(g.idView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
@@ -1003,6 +1022,7 @@ void Raytracer::initDescriptorSetLayouts()
 		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_defferedLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1094,7 +1114,7 @@ void Raytracer::initGBufferShader()
 	};
 
 	VGM::PipelineConfigurator configurator;
-	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB };
+	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB };
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -1105,7 +1125,7 @@ void Raytracer::initGBufferShader()
 	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment };
+	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment, colorBlendAttachment };
 
 	configurator.setRenderingFormats(renderingColorFormats, VK_FORMAT_D32_SFLOAT, VK_FORMAT_UNDEFINED);
 	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 1.0f, 0.0f, 0.0f);
@@ -1123,7 +1143,9 @@ void Raytracer::initGBufferShader()
 	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //bitangant
 	configurator.addVertexInputInputBindingDescription(0, 14 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
 
-	_gBufferShader = VGM::ShaderProgram(sources, _gBufferPipelineLayout, configurator, _vulkan._device, 4);
+	uint32_t numSamplers = 10;
+
+	_gBufferShader = VGM::ShaderProgram(sources, _gBufferPipelineLayout, configurator, _vulkan._device, numSamplers);
 }
 
 void Raytracer::initDefferedShader()
@@ -1161,7 +1183,9 @@ void Raytracer::initDefferedShader()
 	configurator.setBackfaceCulling(VK_CULL_MODE_NONE);
 	configurator.setColorBlendingState(colorBlendAttachments);
 
-	_defferedShader = VGM::ShaderProgram(sources, _defferedPipelineLayout, configurator, _vulkan._device, 4);
+	uint32_t numSamplers = 10;
+
+	_defferedShader = VGM::ShaderProgram(sources, _defferedPipelineLayout, configurator, _vulkan._device, numSamplers);
 }
 
 void Raytracer::initRaytraceShader()
