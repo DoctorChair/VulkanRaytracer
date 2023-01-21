@@ -103,7 +103,7 @@ struct Model
 	std::vector<Mesh> meshes;
 };
 
-struct globalRenderData
+struct GlobalRenderData
 {
 	float fog;
 	uint32_t sunLightCount = 0;
@@ -170,6 +170,11 @@ public:
 
 	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const std::string& name);
 	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels, const std::string& name);
+	
+	//future features
+	//void batchUploadMeshes();
+	//void batchUploadTextures();
+	
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
 	void drawPointLight(PointLight light);
@@ -206,11 +211,6 @@ private:
 	void updateDefferedDescriptorSets();
 	void updateRaytraceDescripotrSets();
 	void updateCompositingDescriptorSets();
-	
-	void drawOffscreen();
-	void renderDeffered();
-	void traceRays();
-	void composit();
 
 	void executeDefferedPass();
 	void executeRaytracePass();
@@ -301,6 +301,7 @@ private:
 	std::vector<SpotLight> _spotLightTransferCache;
 
 	CameraData _cameraData = {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::vec3(0.0f)};
+	GlobalRenderData _globalRenderData = { 0.0f, 0, 0, 0 };
 
 	VGM::DescriptorSetAllocator _offsecreenDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;

@@ -17,7 +17,7 @@ ModelData ModelLoader::loadModel(const std::string& path)
 	if (_loadedModels.find(std::filesystem::path(path).filename().string()) == _loadedModels.end())
 	{
 		Assimp::Importer importer;
-		const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+		const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 
 		if (scene != nullptr)
 		{
@@ -32,6 +32,15 @@ ModelData ModelLoader::loadModel(const std::string& path)
 			std::thread metallicLoadThread(TextureLoader(), scene, root, aiTextureType_METALNESS, &metallicTextures);
 			std::thread roughnessoadThread(TextureLoader(), scene, root, aiTextureType_DIFFUSE_ROUGHNESS, &roughnessTextures);
 
+			aiMatrix4x4 t = scene->mRootNode->mTransformation;
+			glm::mat4 matrix;
+			matrix[0] = { t.a1, t.b1, t.c1, t.d1 };
+			matrix[1] = { t.a2, t.b2, t.c2, t.d2 };
+			matrix[2] = { t.a3, t.b3, t.c3, t.d3 };
+			matrix[3] = { t.a4, t.b4, t.c4, t.d4 };
+
+			handleNode(scene->mRootNode, scene, modelData, root, matrix);
+
 			diffuseLoadThread.join();
 			normalLoadThread.join();
 			metallicLoadThread.join();
@@ -41,15 +50,6 @@ ModelData ModelLoader::loadModel(const std::string& path)
 			_loadedTextures.merge(normalTextures);
 			_loadedTextures.merge(metallicTextures);
 			_loadedTextures.merge(roughnessTextures);
-
-			aiMatrix4x4 t = scene->mRootNode->mTransformation;
-			glm::mat4 matrix;
-			matrix[0] = { t.a1, t.b1, t.c1, t.d1 };
-			matrix[1] = { t.a2, t.b2, t.c2, t.d2 };
-			matrix[2] = { t.a3, t.b3, t.c3, t.d3 };
-			matrix[3] = { t.a4, t.b4, t.c4, t.d4 };
-
-			handleNode(scene->mRootNode, scene, modelData, root, matrix);
 		}
 		else
 		{
@@ -115,12 +115,14 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 		vertex.position.y = mesh->mVertices[i].y;
 		vertex.position.z = mesh->mVertices[i].z;
 
-		if (mesh->HasTextureCoords(0))
+		for (unsigned int j = 0; j < 4; j++)
 		{
-			vertex.texCoord.x = mesh->mTextureCoords[0][i].x;
-			vertex.texCoord.y = mesh->mTextureCoords[0][i].y;
+			if (mesh->HasTextureCoords(j))
+			{
+				vertex.texCoord[j].x = mesh->mTextureCoords[j][i].x;
+				vertex.texCoord[j].y = mesh->mTextureCoords[j][i].y;
+			}
 		}
-
 		if (mesh->HasTangentsAndBitangents())
 		{
 			vertex.normal.x = mesh->mNormals[i].x;

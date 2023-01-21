@@ -668,9 +668,12 @@ void Raytracer::executeDefferedPass()
 	_spotLightBuffers[_currentFrameIndex].uploadData(_spotLightTransferCache.data(),
 		_spotLightTransferCache.size() * sizeof(SpotLight), _vulkan._generalPurposeAllocator);
 
+	_globalRenderData.sunLightCount = static_cast<uint32_t>(_sunLightTransferCache.size());
+	_globalRenderData.pointLightCout = static_cast<uint32_t>(_pointLightTransferCache.size());
+	_globalRenderData.spotLightCount = static_cast<uint32_t>(_spotLightTransferCache.size());
+	
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
-	globalRenderData globalData = {};
-	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&globalData, sizeof(globalData), _vulkan._generalPurposeAllocator);
+	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&_globalRenderData, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
 
 	updateGBufferDescriptorSets();
 
@@ -770,6 +773,7 @@ void Raytracer::executeDefferedPass()
 		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
 	VkDescriptorSet defferedSets[] = {
+		_globalDescriptorSets[_currentFrameIndex],
 		_defferedDescriptorSets[_currentFrameIndex],
 		_lightDescripotrSets[_currentFrameIndex] };
 
@@ -960,7 +964,7 @@ void Raytracer::initDefferedBuffers()
 	_defferdBufferChain.resize(_concurrencyCount);
 	for(auto& d : _defferdBufferChain)
 	{
-		d.colorBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		d.colorBuffer = VGM::Texture(VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		d.colorBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &d.colorView);
 
@@ -1131,17 +1135,20 @@ void Raytracer::initGBufferShader()
 	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 1.0f, 0.0f, 0.0f);
 	configurator.setScissorState(windowWidth, windowHeight, 0.0f, 0.0f);
 	configurator.setInputAssemblyState(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	configurator.setBackfaceCulling(VK_CULL_MODE_NONE);
+	configurator.setBackfaceCulling(VK_CULL_MODE_BACK_BIT);
 	configurator.setColorBlendingState(colorBlendAttachments);
 	configurator.setDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
 	
 
 	configurator.addVertexAttribInputDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0); //Position
 	configurator.addVertexAttribInputDescription(1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(float)); //texCoord
-	configurator.addVertexAttribInputDescription(2, 0, VK_FORMAT_R32G32B32_SFLOAT, 5 * sizeof(float)); //normal
-	configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32B32_SFLOAT, 8 * sizeof(float)); //tangent
-	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //bitangant
-	configurator.addVertexInputInputBindingDescription(0, 14 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX);
+	configurator.addVertexAttribInputDescription(2, 0, VK_FORMAT_R32G32_SFLOAT, 5 * sizeof(float)); //texCoord
+	configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32_SFLOAT, 7 * sizeof(float)); //texCoord
+	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32_SFLOAT, 9 * sizeof(float)); //texCoord
+	configurator.addVertexAttribInputDescription(5, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //normal
+	configurator.addVertexAttribInputDescription(6, 0, VK_FORMAT_R32G32B32_SFLOAT, 14 * sizeof(float)); //tangent
+	configurator.addVertexAttribInputDescription(7, 0, VK_FORMAT_R32G32B32_SFLOAT, 17 * sizeof(float)); //bitangant
+	configurator.addVertexInputInputBindingDescription(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX);
 
 	uint32_t numSamplers = 10;
 
@@ -1150,15 +1157,15 @@ void Raytracer::initGBufferShader()
 
 void Raytracer::initDefferedShader()
 {
-	VkDescriptorSetLayout setLayouts[] = {_defferedLayout, _lightLayout};
+	VkDescriptorSetLayout setLayouts[] = {_globalLayout, _defferedLayout, _lightLayout};
 
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	createInfo.pNext = nullptr;
 	createInfo.flags = 0;
 	createInfo.pushConstantRangeCount = 0;
-	createInfo.setLayoutCount = 2;
-	createInfo.pSetLayouts = &_defferedLayout;
+	createInfo.setLayoutCount = 3;
+	createInfo.pSetLayouts = setLayouts;
 	
 	vkCreatePipelineLayout(_vulkan._device, &createInfo, nullptr, &_defferedPipelineLayout);
 
@@ -1169,7 +1176,7 @@ void Raytracer::initDefferedShader()
 	};
 
 	VGM::PipelineConfigurator configurator;
-	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_SRGB };
+	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R32G32B32A32_SFLOAT };
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -1334,7 +1341,7 @@ void Raytracer::initDataBuffers()
 		_drawDataIsntanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxDrawCount * sizeof(DrawData), _vulkan._generalPurposeAllocator);
 		_drawIndirectCommandBuffer[i] = VGM::Buffer(VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, _maxDrawCount * sizeof(VkDrawIndexedIndirectCommand), _vulkan._generalPurposeAllocator);
 		_cameraBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraData), _vulkan._generalPurposeAllocator);
-		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(globalRenderData), _vulkan._generalPurposeAllocator);
+		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
 		_instanceIndexBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, _maxDrawCount * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
 		_instanceIndexTransferBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, _maxDrawCount * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
 	}
