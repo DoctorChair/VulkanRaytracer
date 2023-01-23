@@ -43,7 +43,9 @@ void main()
 	normal.xyz = tbnMatrix * normal.xyz;
 	outNormal =  vec4(normalize(normal.xyz ), normal.w);
 
-	outRoughnessMetallness = metallic;
+	outRoughnessMetallness.x = roughness.y;
+	outRoughnessMetallness.y = metallic.z;
+	outRoughnessMetallness.w = metallic.w;
 
 	outColor = color;
 	

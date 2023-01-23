@@ -103,7 +103,7 @@ vec3 BRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, floa
 	float normalDotView = dot(normal, viewDirection);
 	float normalDotHalfway = dot(normal, halfwayVector);
 
-	vec3 fresnel = fresnelSchlick(r0, lightDirDotHalfway);
+	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
 	float geometric = geometricFunction(normalDotView, normalDotLightDir, alpha * 0.5);
 	float ndf = ndfGGX(normalDotHalfway, alpha);
 
@@ -115,7 +115,7 @@ vec3 BRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, floa
 	lambert = lambert * (1.0 - metallic);
 	lambert = lambert / M_PI;
 
-	return lambert + specular;
+	return  lambert  + specular;
 }
 
 void main()
@@ -129,7 +129,7 @@ void main()
 
 	vec3 normal = normalize(texture(inNormal, texCoord).xyz);
 	vec3 color = texture(inColor, texCoord).xyz;
-	vec4 roughnessMetalness = texture(inRoughnessMetalness, texCoord);
+	vec4 roughnessMetalness = normalize(texture(inRoughnessMetalness, texCoord));
 	
 	float reflectance = 0.04;	
 	float roughness = roughnessMetalness.x;
@@ -157,13 +157,13 @@ void main()
 	vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
 	vec3 lightDirection = normalize(pointLightBuffer.pointLights[i].position - position.xyz);
 	
-	vec3 brdf = BRDF(viewDirection, lightDirection, normal, color, 0.0, 1.0, reflectance);
+	vec3 brdf = BRDF(viewDirection, lightDirection, normal, color, metallic, roughness, reflectance);
 
 	float irradiance = max(dot(normal, lightDirection), 0.0);
 
-	radiance =  radiance + irradiance * brdf * lightColor * 3.0;
+	radiance =  radiance + irradiance * brdf * lightColor;
 	}
 
-	outColor = vec4(radiance, 1.0);
+	outColor = vec4(radiance, 1.0f);
 }
 
