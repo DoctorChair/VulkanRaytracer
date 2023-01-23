@@ -547,6 +547,11 @@ void Raytracer::updateDefferedDescriptorSets()
 	idInfo.imageView = currentGBuffer->idView;
 	idInfo.sampler = _defferedShader.getSamplers()[4];
 
+	VkDescriptorImageInfo positionInfo;
+	positionInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	positionInfo.imageView = currentGBuffer->positionView;
+	positionInfo.sampler = _defferedShader.getSamplers()[5];
+
 	VkDescriptorBufferInfo sunInfo = {};
 	sunInfo.buffer = currentSunLightBuffer->get();
 	sunInfo.offset = 0;
@@ -570,6 +575,7 @@ void Raytracer::updateDefferedDescriptorSets()
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depthInfo, nullptr, 1, 0, 2)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &roughnessMetalnessInfo, nullptr, 1, 0, 3)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &idInfo, nullptr, 1, 0, 4)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &positionInfo, nullptr, 1, 0, 5)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, sunInfo, 1, 1, 0)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, pointInfo, 1, 1, 1)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, spotInfo, 1, 1, 2)
@@ -717,6 +723,9 @@ void Raytracer::executeDefferedPass()
 	currentGBuffer->normalBuffer.cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
+	currentGBuffer->positionBuffer.cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
 	subresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	currentGBuffer->depthBuffer.cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 		VK_ACCESS_NONE, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
@@ -760,6 +769,11 @@ void Raytracer::executeDefferedPass()
 	currentGBuffer->normalBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+	currentGBuffer->positionBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
 	subresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -929,7 +943,9 @@ void Raytracer::initgBuffers()
 	_gBufferChain.resize(_concurrencyCount);
 	for (auto& g : _gBufferChain)
 	{
-		g.normalBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		g.positionBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
+		g.normalBuffer = VGM::Texture(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		g.idBuffer =  VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
@@ -942,6 +958,7 @@ void Raytracer::initgBuffers()
 
 		VkClearColorValue clear = { 1.0f, 1.0f, 1.0f };
 
+		
 		g.colorBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.colorView);
 		g.framebuffer.bindColorTextureTarget(g.colorView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
 
@@ -953,6 +970,9 @@ void Raytracer::initgBuffers()
 
 		g.idBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.idView);
 		g.framebuffer.bindColorTextureTarget(g.idView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
+
+		g.positionBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.positionView);
+		g.framebuffer.bindColorTextureTarget(g.positionView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clear);
 
 		g.depthBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &g.depthView);
 		g.framebuffer.bindDepthTextureTarget(g.depthView, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, 1.0f);
@@ -1027,6 +1047,7 @@ void Raytracer::initDescriptorSetLayouts()
 		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_defferedLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1118,7 +1139,7 @@ void Raytracer::initGBufferShader()
 	};
 
 	VGM::PipelineConfigurator configurator;
-	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB };
+	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB };
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -1129,7 +1150,7 @@ void Raytracer::initGBufferShader()
 	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment, colorBlendAttachment };
+	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment, colorBlendAttachment, colorBlendAttachment };
 
 	configurator.setRenderingFormats(renderingColorFormats, VK_FORMAT_D32_SFLOAT, VK_FORMAT_UNDEFINED);
 	configurator.setViewportState(windowWidth, windowHeight, 0.0f, 1.0f, 0.0f, 0.0f);

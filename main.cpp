@@ -60,14 +60,18 @@ int main(int argc, char* argv[])
 	loader.freeAssets();
 
 	PointLight point = {};
+	point.position = glm::vec3(0.0f, 2.0f, 0.0f);
+	point.color = glm::vec4(1.0f, 1.0f, 0.9f, 1.0f);
+
 	SunLight sun = {};
 	sun.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-	sun.direction = glm::vec3(1.0f, 1.0f, 1.0f);
+	sun.direction = glm::vec3(1.0f, -1.0f, 1.0f);
+	
 	SpotLight spot = {};
 
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
-	CameraController camera(10.0f, 20.0f, 90.0f, 1.0f, 0.1f, 100.0f, up);
+	CameraController camera(100.0f, 20.0f, 90.0f, 1.0f, 0.1f, 1000.0f, up);
 	
 
 	bool quit = false;

@@ -27,6 +27,8 @@ struct GBuffer
 {
 	VGM::Framebuffer framebuffer;
 
+	VGM::Texture positionBuffer;
+	VkImageView positionView;
 	VGM::Texture colorBuffer;
 	VkImageView colorView;
 	VGM::Texture normalBuffer;
@@ -140,10 +142,9 @@ struct FrameSynchro
 
 struct SunLight
 {
-	glm::vec3 position;
 	glm::vec3 direction;
 	glm::vec4 color;
-	float strength;
+	float padding;
 };
 
 struct PointLight

@@ -11,9 +11,14 @@ layout(set = 0, binding = 0, rgba32f) uniform image2D image;
 
 void main()
 {
-	//return color
 	
+	const float gamma = 2.2;
+
 	ivec2 pixCoord = ivec2((texCoord*1024));
-    vec4 color = imageLoad(image, pixCoord);
-	outColor = color;
+   
+    vec4 hdrColor = imageLoad(image, pixCoord);
+    vec4 mapped = hdrColor / (hdrColor + vec4(1.0));
+    mapped = pow(mapped, vec4(1.0 / gamma));
+	
+	outColor = hdrColor;
 }
