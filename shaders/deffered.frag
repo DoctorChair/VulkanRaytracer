@@ -153,7 +153,7 @@ void main()
 
 	float irradiance = max(dot(normal, lightDirection), 0.0);
 
-	radiance =  radiance + normal;// + vec3( irradiance ) * brdf * lightColor;
+	radiance =  radiance + vec3( irradiance ) ;//* brdf * lightColor;
 	}
 
 	outColor = vec4(radiance, 1.0);

@@ -184,23 +184,23 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 		return it->second;
 	}
 
-	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+	VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
 	switch (nrChannels)
 	{
 	case 1:
-		format = VK_FORMAT_R8_SRGB;
+		format = VK_FORMAT_R8_UNORM;
 		break;
 
 	case 2:
-		format = VK_FORMAT_R8G8_SRGB;
+		format = VK_FORMAT_R8G8_UNORM;
 		break;
 
 	case 3:
-		format = VK_FORMAT_R8G8B8_SRGB;
+		format = VK_FORMAT_R8G8B8_UNORM;
 		break;
 
 	case 4:
-		format = VK_FORMAT_R8G8B8A8_SRGB;
+		format = VK_FORMAT_R8G8B8A8_UNORM;
 		break;
 	case 5:
 		return 0;
@@ -224,7 +224,7 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 			e = e + 4;
 		}
 
-		format = VK_FORMAT_R8G8B8A8_SRGB;
+		format = VK_FORMAT_R8G8B8A8_UNORM;
 
 		_textures.emplace_back(VGM::Texture(format, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
 			{ width, height, 1 }, 1, _maxMipMapLevels, _vulkan._textureAllocator));
@@ -943,15 +943,15 @@ void Raytracer::initgBuffers()
 	_gBufferChain.resize(_concurrencyCount);
 	for (auto& g : _gBufferChain)
 	{
-		g.positionBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		g.positionBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		g.normalBuffer = VGM::Texture(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
-		g.idBuffer =  VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		g.idBuffer =  VGM::Texture(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
-		g.colorBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		g.colorBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
-		g.roughnessMetalnessBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		g.roughnessMetalnessBuffer = VGM::Texture(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		g.depthBuffer = VGM::Texture(VK_FORMAT_D32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ windowWidth, windowHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
@@ -1139,7 +1139,8 @@ void Raytracer::initGBufferShader()
 	};
 
 	VGM::PipelineConfigurator configurator;
-	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB };
+	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT, 
+		VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM };
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;

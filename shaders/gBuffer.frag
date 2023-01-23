@@ -39,7 +39,7 @@ void main()
 	
 	mat3 tbnMatrix = mat3(T, -B, N);
 	
-	normal.xyz = normalize(normal.xyz * 2.0 - 1.0); //Normal map seems to be in wrong format !!!!!
+	normal.xyz = normalize(normal.xyz * 2.0 - 1.0); 
 	normal.xyz = tbnMatrix * normal.xyz;
 	outNormal =  vec4(normalize(normal.xyz ), normal.w);
 
