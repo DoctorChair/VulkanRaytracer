@@ -20,5 +20,5 @@ void main()
     vec4 mapped = hdrColor / (hdrColor + vec4(1.0));
     mapped = pow(mapped, vec4(1.0 / gamma));
 	
-	outColor = hdrColor;
+	outColor = mapped;
 }

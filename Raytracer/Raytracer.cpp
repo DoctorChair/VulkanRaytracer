@@ -202,6 +202,7 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 	case 4:
 		format = VK_FORMAT_R8G8B8A8_UNORM;
 		break;
+
 	case 5:
 		return 0;
 	}
