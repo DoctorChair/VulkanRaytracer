@@ -146,22 +146,27 @@ void main()
 	
 	vec3 brdf = BRDF(viewDirection, lightDirection, normal, color, metallic, roughness, reflectance);
 
-	float irradiance = max(dot(normal, lightDirection), 0.0001);
+	float irradiance = max(dot(normal, lightDirection), 0.0);
 	
 	radiance =  radiance + irradiance * brdf * lightColor;	
 	}
 
 	for(int i = 0; i < globalDrawData.pointLightCount; i++)
 	{
-
 	vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
-	vec3 lightDirection = normalize(pointLightBuffer.pointLights[i].position - position.xyz);
+
+	vec3 lightDirection = pointLightBuffer.pointLights[i].position - position.xyz;
 	
+	float distance = length(lightDirection);
+	float attenuation = 1.0/(distance*distance);
+
+	lightDirection = normalize(lightDirection);
+
 	vec3 brdf = BRDF(viewDirection, lightDirection, normal, color, metallic, roughness, reflectance);
 
 	float irradiance = max(dot(normal, lightDirection), 0.0);
 
-	radiance =  radiance + irradiance * brdf * lightColor;
+	radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;
 	}
 
 	outColor = vec4(radiance, 1.0f);
