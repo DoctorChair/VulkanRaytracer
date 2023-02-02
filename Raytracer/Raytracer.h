@@ -91,7 +91,7 @@ struct MeshInstance
 {
 	uint32_t blasIndex;
 	uint32_t meshIndex;
-	uint32_t materialIndex;
+	Material material;
 	uint32_t instanceID;
 };
 
@@ -249,10 +249,10 @@ private:
 	std::vector<Mesh> _meshes;
 	std::unordered_map<std::string, uint32_t> _loadedMeshes;
 	
-	std::vector<Material> _materials;
-
 	MeshBuffer _meshBuffer;
 	AccelerationStructure _accelerationStructure;
+
+	uint32_t _activeInstanceCount = 0;
 
 	VGM::ShaderProgram _gBufferShader;
 	VkPipelineLayout _gBufferPipelineLayout;

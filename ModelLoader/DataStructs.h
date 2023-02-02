@@ -25,7 +25,7 @@ struct MeshData
 {
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
-	glm::mat4 transform;
+	glm::mat4 transform = glm::mat4(1.0f);
 	pbrMaterialData material;
 	std::string name;
 };

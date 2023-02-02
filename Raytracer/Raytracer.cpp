@@ -81,6 +81,7 @@ void Raytracer::init(SDL_Window* window)
 	initPresentFramebuffers();
 	initMeshBuffer();
 	initTextureArrays();
+	loadPlaceholderMeshAndTexture();
 }
 
 Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const std::string& name)
@@ -181,6 +182,9 @@ MeshInstance Raytracer::getMeshInstance(const std::string& name)
 	uint32_t index = _loadedMeshes.at(name);
 	instance.meshIndex = index;
 	instance.blasIndex = _meshes[index].blasIndex;
+	instance.instanceID = _activeInstanceCount;
+
+	_activeInstanceCount++;
 
 	return instance;
 }
@@ -316,7 +320,7 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 void Raytracer::drawMeshInstance(MeshInstance meshInstance, glm::mat4 transform)
 {
 	Mesh mesh = _meshes[meshInstance.meshIndex];
-	Material material = _materials[meshInstance.materialIndex];
+	Material material = meshInstance.material;
 	BLAS* blas = &_accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex];
 
 	VkDrawIndexedIndirectCommand command;
@@ -872,17 +876,25 @@ void Raytracer::executeRaytracePass()
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
 
 	VkDeviceAddress firstAddress = currentInstanceBuffer->getDeviceAddress(_vulkan._device);
-	VkDeviceSize addressAlignemnt = currentInstanceBuffer->getAlignment(_vulkan._device);
 
 	if(currentTopLevelAccelStructure->isUpdateable())
 	{
 		currentTopLevelAccelStructure->cmdUpdateTLAS(_accelerationStructure._instanceTransferCache.size(),
-			firstAddress, addressAlignemnt, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
+			firstAddress, 0, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
 	}
 	else
 	{
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties = {};
+		accelProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+		VkPhysicalDeviceProperties2 features = {};
+		features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		features.pNext = &accelProperties;
+
+		vkGetPhysicalDeviceProperties2(_vulkan._physicalDevice, &features);
+		uint32_t minAlignment = accelProperties.minAccelerationStructureScratchOffsetAlignment;
+
 		currentTopLevelAccelStructure->cmdBuildTLAS(_accelerationStructure._instanceTransferCache.size(),
-			firstAddress, addressAlignemnt, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
+			firstAddress, minAlignment, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
 	}
 
 	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,

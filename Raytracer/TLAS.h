@@ -9,7 +9,7 @@ class TLAS
 public:
 	TLAS() = default;
 
-	void cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, VkDeviceSize addressAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer);
+	void cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, uint32_t addressAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer);
 	void cmdUpdateTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, VkDeviceSize addressAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer);
 	bool isUpdateable();
 

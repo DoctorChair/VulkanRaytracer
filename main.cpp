@@ -30,6 +30,8 @@ int main(int argc, char* argv[])
 	int i = 0;
 
 	std::vector<Mesh> testScene;
+
+	std::vector<MeshInstance> instances;
 	for(auto& m : sponza.meshes)
 	{
 		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices, m.name));
@@ -54,7 +56,9 @@ int main(int argc, char* argv[])
 			TextureData* data = loader.getTextureData(m.material.roughness);
 			testScene.back().material.roughnessIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.roughness);
 		}
-	
+		
+		instances.push_back(raytracer.getMeshInstance(m.name));
+		instances.back().material = testScene.back().material;
 	}
 
 	loader.freeAssets();
@@ -157,7 +161,8 @@ int main(int argc, char* argv[])
 		uint32_t id = 0;
 		for(unsigned int i = 0; i<testScene.size(); i++)
 		{
-			raytracer.drawMesh(testScene[i], sponza.meshes[i].transform, id);
+			//raytracer.drawMesh(testScene[i], sponza.meshes[i].transform, id);
+			raytracer.drawMeshInstance(instances[i], sponza.meshes[i].transform);
 			id++;
 		}
 		

@@ -1,7 +1,7 @@
 #include "TLAS.h"
 #include <vector>
 
-void TLAS::cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, VkDeviceSize addressAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer)
+void TLAS::cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, uint32_t scratchOffsetAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer)
 {
 	VkAccelerationStructureBuildRangeInfoKHR range;
 	range.primitiveCount = instanceCount;
@@ -9,30 +9,23 @@ void TLAS::cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAdd
 	range.primitiveOffset = 0;
 	range.transformOffset = 0;
 
-	std::vector<VkAccelerationStructureGeometryKHR> geometries;
-	geometries.reserve(instanceCount);
+	VkAccelerationStructureGeometryInstancesDataKHR instances = {};
+	instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+	instances.arrayOfPointers = VK_FALSE;
+	instances.data.deviceAddress = firstInstanceAddresses;
 
-	for (unsigned int i = 0; i < instanceCount; i++)
-	{
-		VkAccelerationStructureGeometryInstancesDataKHR instances = {};
-		instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-		instances.arrayOfPointers = VK_FALSE;
-		instances.data.deviceAddress = firstInstanceAddresses + sizeof(VkAccelerationStructureInstanceKHR) * i;
-
-		VkAccelerationStructureGeometryKHR geometry = {};
-		geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-		geometry.pNext = nullptr;
-		geometry.geometry.instances = instances;
-		geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
-		geometries.push_back(geometry);
-	}
-
+	VkAccelerationStructureGeometryKHR geometry = {};
+	geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	geometry.pNext = nullptr;
+	geometry.geometry.instances = instances;
+	geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+		
 	VkAccelerationStructureBuildGeometryInfoKHR build = {};
 	build.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	build.pNext = nullptr;
 	build.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
-	build.geometryCount = geometries.size();
-	build.pGeometries = geometries.data();
+	build.geometryCount = 1;
+	build.pGeometries = &geometry;
 	build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	build.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 	build.srcAccelerationStructure = VK_NULL_HANDLE;
@@ -60,9 +53,15 @@ void TLAS::cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAdd
 	build.dstAccelerationStructure = _tlas;
 
 	_scratchBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		size.buildScratchSize, allocator, device);
+		size.buildScratchSize + scratchOffsetAlignment, allocator, device);
 
-	build.scratchData.deviceAddress = _scratchBuffer.getDeviceAddress(device);
+	VkDeviceAddress scratchAddress = _scratchBuffer.getDeviceAddress(device);
+	if (scratchOffsetAlignment != 0)
+	{
+		VkDeviceAddress r = scratchAddress % scratchOffsetAlignment;
+		scratchAddress = (r == 0) ? scratchAddress : scratchAddress + (scratchOffsetAlignment - r);
+	}
+	build.scratchData.deviceAddress = scratchAddress;
 
 	VkAccelerationStructureBuildRangeInfoKHR* pRangeInfo = &range;
 
@@ -79,30 +78,23 @@ void TLAS::cmdUpdateTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAd
 	range.primitiveOffset = 0;
 	range.transformOffset = 0;
 
-	std::vector<VkAccelerationStructureGeometryKHR> geometries;
-	geometries.reserve(instanceCount);
+	VkAccelerationStructureGeometryInstancesDataKHR instances = {};
+	instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+	instances.arrayOfPointers = VK_FALSE;
+	instances.data.deviceAddress = firstInstanceAddresses;
 
-	for (unsigned int i = 0; i < instanceCount; i++)
-	{
-		VkAccelerationStructureGeometryInstancesDataKHR instances = {};
-		instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-		instances.arrayOfPointers = VK_FALSE;
-		instances.data.deviceAddress = firstInstanceAddresses + sizeof(VkAccelerationStructureInstanceKHR) * i;
-
-		VkAccelerationStructureGeometryKHR geometry = {};
-		geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-		geometry.pNext = nullptr;
-		geometry.geometry.instances = instances;
-		geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
-		geometries.push_back(geometry);
-	}
+	VkAccelerationStructureGeometryKHR geometry = {};
+	geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	geometry.pNext = nullptr;
+	geometry.geometry.instances = instances;
+	geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
 
 	VkAccelerationStructureBuildGeometryInfoKHR build = {};
 	build.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	build.pNext = nullptr;
 	build.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
-	build.geometryCount = geometries.size();
-	build.pGeometries = geometries.data();
+	build.geometryCount = 1;
+	build.pGeometries = &geometry;
 	build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
 	build.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
 	build.srcAccelerationStructure = _tlas;
