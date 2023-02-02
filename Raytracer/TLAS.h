@@ -8,8 +8,11 @@ class TLAS
 {
 public:
 	TLAS() = default;
-	TLAS(VkBuffer instanceBuffer, uint32_t instanceCount, VkDeviceAddress* pBLASAdresses, uint32_t pBLASAdressesCount,
-		uint32_t* pNumInstances, uint32_t numInstancesCount, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer);
+
+	void cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, VkDeviceSize addressAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer);
+	void cmdUpdateTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, VkDeviceSize addressAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer);
+	bool isUpdateable();
+
 	void destroy(VkDevice device, VmaAllocator allocator);
 	VkAccelerationStructureKHR* get();
 
@@ -19,4 +22,5 @@ private:
 	VGM::Buffer _instanceBuffer;
 	VkAccelerationStructureKHR _tlas;
 
+	bool _structureActive = false;
 };

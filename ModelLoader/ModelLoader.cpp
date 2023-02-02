@@ -18,7 +18,7 @@ ModelData ModelLoader::loadModel(const std::string& path)
 	{
 		Assimp::Importer importer;
 		const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
-
+		
 		if (scene != nullptr)
 		{
 			std::string root = std::filesystem::path(path).parent_path().string();
@@ -55,9 +55,7 @@ ModelData ModelLoader::loadModel(const std::string& path)
 		{
 			return modelData;
 		}
-
 		
-
 		_loadedModels.insert(std::make_pair(std::filesystem::path(path).filename().string(), modelData));
 	}
 
@@ -93,7 +91,7 @@ void ModelLoader::handleNode(aiNode* node, const aiScene* scene, ModelData& mode
 		MeshData meshData = copyMeshData(scene->mMeshes[index], scene, root, transfrom);
 		model.meshes.push_back(meshData);
 	}
-
+	
 	for (unsigned int i = 0; i < node->mNumChildren; i++)
 	{
 		handleNode(node->mChildren[i], scene, model, root, transfrom);

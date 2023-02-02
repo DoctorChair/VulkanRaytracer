@@ -81,7 +81,6 @@ void Raytracer::init(SDL_Window* window)
 	initPresentFramebuffers();
 	initMeshBuffer();
 	initTextureArrays();
-	initTLAS();	
 }
 
 Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const std::string& name)
@@ -108,8 +107,8 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 
 	vkCreateFence(_vulkan._device, &createInfo, nullptr, &transferFence);
 
-	VGM::Buffer vertexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vertices.size() * sizeof(Vertex), _vulkan._generalPurposeAllocator);
-	VGM::Buffer indexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, indices.size() * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
+	VGM::Buffer vertexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vertices.size() * sizeof(Vertex), _vulkan._generalPurposeAllocator, _vulkan._device);
+	VGM::Buffer indexTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, indices.size() * sizeof(uint32_t), _vulkan._generalPurposeAllocator, _vulkan._device);
 
 	vertexTransferBuffer.uploadData(vertices.data(), vertices.size() * sizeof(Vertex), _vulkan._generalPurposeAllocator);
 	indexTransferBuffer.uploadData(indices.data(), indices.size() * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
@@ -174,6 +173,16 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 	indexTransferBuffer.destroy(_vulkan._generalPurposeAllocator);
 
 	return mesh;
+}
+
+MeshInstance Raytracer::getMeshInstance(const std::string& name)
+{
+	MeshInstance instance;
+	uint32_t index = _loadedMeshes.at(name);
+	instance.meshIndex = index;
+	instance.blasIndex = _meshes[index].blasIndex;
+
+	return instance;
 }
 
 uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nrChannels, const std::string& name)
@@ -251,7 +260,7 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 
 	vkCreateFence(_vulkan._device, &createInfo, nullptr, &transferFence);
 
-	VGM::Buffer pixelTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, pixels.size() * sizeof(unsigned char), _vulkan._generalPurposeAllocator);
+	VGM::Buffer pixelTransferBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, pixels.size() * sizeof(unsigned char), _vulkan._generalPurposeAllocator, _vulkan._device);
 	pixelTransferBuffer.uploadData(pixels.data(), pixels.size() * sizeof(unsigned char), _vulkan._generalPurposeAllocator);
 
 	_transferCommandBuffer = VGM::CommandBuffer(_transferCommandBufferAllocator, _vulkan._device);
@@ -304,10 +313,49 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 	return _textures.size()-1;
 }
 
+void Raytracer::drawMeshInstance(MeshInstance meshInstance, glm::mat4 transform)
+{
+	Mesh mesh = _meshes[meshInstance.meshIndex];
+	Material material = _materials[meshInstance.materialIndex];
+	BLAS* blas = &_accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex];
+
+	VkDrawIndexedIndirectCommand command;
+	command.vertexOffset = mesh.vertexOffset;
+	command.instanceCount = 1;
+	command.indexCount = mesh.indicesCount;
+	command.firstIndex = mesh.indexOffset;
+	command.firstInstance = static_cast<uint32_t>(_drawCommandTransferCache.size());
+
+	_drawCommandTransferCache.push_back(command);
+	_drawDataTransferCache.push_back({ transform, material , 0 });
+
+	VkAccelerationStructureInstanceKHR instace = {};
+	instace.transform.matrix[0][0] = transform[0][0];
+	instace.transform.matrix[0][1] = transform[0][1];
+	instace.transform.matrix[0][2] = transform[0][2];
+	
+	instace.transform.matrix[1][0] = transform[1][0];
+	instace.transform.matrix[1][1] = transform[1][1];
+	instace.transform.matrix[1][2] = transform[1][2];
+	
+	instace.transform.matrix[2][0] = transform[2][0];
+	instace.transform.matrix[2][1] = transform[2][1];
+	instace.transform.matrix[2][2] = transform[2][2];
+
+	instace.transform.matrix[2][3] = 1.0f;
+	instace.accelerationStructureReference = _accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex].getAddress(_vulkan._device);
+	instace.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+	instace.instanceCustomIndex = 0;
+	instace.mask = 0xFF;
+	instace.instanceShaderBindingTableRecordOffset = 0;
+
+	_accelerationStructure._instanceTransferCache.push_back(instace);
+}
+
 void Raytracer::drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID)
 {
 	_drawDataTransferCache.push_back({ transform, mesh.material , objectID });
-	_instanceIndexTransferCache.push_back(static_cast<uint32_t>(_instanceIndexTransferCache.size()));
+	
 	VkDrawIndexedIndirectCommand command;
 	command.vertexOffset = mesh.vertexOffset;
 	command.instanceCount = 1;
@@ -372,9 +420,9 @@ void Raytracer::initPresentFramebuffers()
 void Raytracer::initMeshBuffer()
 {
 	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT 
-		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, _maxTriangleCount * 3 * sizeof(Vertex), _vulkan._meshAllocator);
+		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, _maxTriangleCount * 3 * sizeof(Vertex), _vulkan._meshAllocator, _vulkan._device);
 	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT 
-		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, _maxTriangleCount * sizeof(uint32_t), _vulkan._meshAllocator);
+		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, _maxTriangleCount * sizeof(uint32_t), _vulkan._meshAllocator, _vulkan._device);
 }
 
 void Raytracer::initTextureArrays()
@@ -401,7 +449,7 @@ void Raytracer::initShaderBindingTable()
 		_vulkan._device, _vulkan._generalPurposeAllocator, groupBaseAlignment, _raytraceShader.missShaderCount(), _raytraceShader.hitShaderCount());
 }
 
-void Raytracer::loadDummyMeshInstance()
+void Raytracer::loadPlaceholderMeshAndTexture()
 {
 	Vertex vertex0, vertex1, vertex2;
 	vertex0.position = { -1.0f, -1.0f, 0.0f };
@@ -417,49 +465,6 @@ void Raytracer::loadDummyMeshInstance()
 	_dummyMesh.material.normalIndex = index;
 	_dummyMesh.material.metallicIndex = index;
 	_dummyMesh.material.roughnessIndex = index;
-}
-
-void Raytracer::initTLAS()
-{
-	loadDummyMeshInstance();
-
-	VGM::CommandBuffer raytraceBuildCommandBuffer(_computeCommandBufferAllocator, _vulkan._device);
-
-	_accelerationStructure.instanceBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT 
-		| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		_maxDrawCount * sizeof(VkAccelerationStructureInstanceKHR), _vulkan._generalPurposeAllocator);
-
-	VkAccelerationStructureInstanceKHR dummyInstance;
-	dummyInstance.transform.matrix[0][0] = 1.0f;
-	dummyInstance.transform.matrix[1][1] = 1.0f;
-	dummyInstance.transform.matrix[2][2] = 1.0f;
-	dummyInstance.transform.matrix[2][3] = 1.0f;
-	dummyInstance.accelerationStructureReference = _accelerationStructure.bottomLevelAccelStructures.back().getAddress(_vulkan._device);
-	dummyInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-	dummyInstance.instanceCustomIndex = 0;
-	dummyInstance.mask = 0xFF;
-	dummyInstance.instanceShaderBindingTableRecordOffset = 0;
-
-	void* dst = _accelerationStructure.instanceBuffer.map(_vulkan._generalPurposeAllocator);
-	memcpy(dst, &dummyInstance, sizeof(VkAccelerationStructureInstanceKHR));
-	_accelerationStructure.instanceBuffer.unmap(_vulkan._generalPurposeAllocator);
-
-	raytraceBuildCommandBuffer.begin(nullptr, 0, _vulkan._device);
-
-	_accelerationStructure.instanceBuffer.cmdMemoryBarrier(raytraceBuildCommandBuffer.get(), VK_ACCESS_TRANSFER_WRITE_BIT,
-		VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
-		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
-
-	uint32_t numInstances = 1;
-	VkDeviceAddress instanceAddress = _accelerationStructure.instanceBuffer.getDeviceAddress(_vulkan._device);
-	
-	//error in this function 
-	_accelerationStructure.topLevelAccelStructure = TLAS(_accelerationStructure.instanceBuffer.get(), 1,
-		&instanceAddress, 1, &numInstances, 1, _vulkan._device, _vulkan._meshAllocator, raytraceBuildCommandBuffer.get());
-
-	raytraceBuildCommandBuffer.end();
-	
-	raytraceBuildCommandBuffer.submit(nullptr, 0, nullptr, 0, nullptr, VK_NULL_HANDLE, _vulkan._computeQueue);
 }
 
 void Raytracer::updateGBufferDescriptorSets()
@@ -612,7 +617,7 @@ void Raytracer::updateRaytraceDescripotrSets()
 	VkWriteDescriptorSetAccelerationStructureKHR accelWrite;
 	accelWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 	accelWrite.pNext = nullptr;
-	accelWrite.pAccelerationStructures = _accelerationStructure.topLevelAccelStructure.get();
+	accelWrite.pAccelerationStructures = _accelerationStructure.topLevelAccelStructures[_currentFrameIndex].get();
 	accelWrite.accelerationStructureCount = 1;
 
 	VkDescriptorSet sets[] = { _raytracer1DescriptorSets[_currentFrameIndex], _raytracer2DescriptorSets[_currentFrameIndex] };
@@ -664,9 +669,7 @@ void Raytracer::executeDefferedPass()
 		_drawDataTransferCache.size() * sizeof(DrawData),
 		_vulkan._generalPurposeAllocator);
 
-	_instanceIndexTransferBuffers[_currentFrameIndex].uploadData(_instanceIndexTransferCache.data(),
-		_instanceIndexTransferCache.size() * sizeof(uint32_t),
-		_vulkan._generalPurposeAllocator);
+	
 
 	_sunLightBuffers[_currentFrameIndex].uploadData(_sunLightTransferCache.data(),
 		_sunLightTransferCache.size() * sizeof(SunLight), _vulkan._generalPurposeAllocator);
@@ -690,8 +693,7 @@ void Raytracer::executeDefferedPass()
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
 	_drawDataIsntanceBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
-	_instanceIndexTransferBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0);
+	
 
 	_sunLightBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(),
 		VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0);
@@ -836,7 +838,7 @@ void Raytracer::executeDefferedPass()
 	_spotLightTransferCache.clear();
 	_drawCommandTransferCache.clear();
 	_drawDataTransferCache.clear();
-	_instanceIndexTransferCache.clear();
+	
 }
 
 void Raytracer::executeRaytracePass()
@@ -850,6 +852,9 @@ void Raytracer::executeRaytracePass()
 	DefferedBuffer* currentDefferedBuffer = &_defferdBufferChain[_currentFrameIndex];
 	RaytraceBuffer* currentRaytraceBuffer = &_raytraceBufferChain[_currentFrameIndex];
 
+	TLAS* currentTopLevelAccelStructure = &_accelerationStructure.topLevelAccelStructures[_currentFrameIndex];
+	VGM::Buffer* currentInstanceBuffer = &_accelerationStructure.instanceBuffers[_currentFrameIndex];
+
 	VkDescriptorSet sets[] = {
 		_globalDescriptorSets[_currentFrameIndex],
 		_raytracer1DescriptorSets[_currentFrameIndex],
@@ -857,6 +862,31 @@ void Raytracer::executeRaytracePass()
 	};
 
 	raytraceCmd->begin(nullptr, 0, _vulkan._device);
+
+	void* ptr = currentInstanceBuffer->map(_vulkan._generalPurposeAllocator);
+	currentInstanceBuffer->memcopy(ptr, _accelerationStructure._instanceTransferCache.data(), 
+		sizeof(VkAccelerationStructureInstanceKHR) * _accelerationStructure._instanceTransferCache.size());
+	currentInstanceBuffer->unmap(_vulkan._generalPurposeAllocator);
+	
+	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
+
+	VkDeviceAddress firstAddress = currentInstanceBuffer->getDeviceAddress(_vulkan._device);
+	VkDeviceSize addressAlignemnt = currentInstanceBuffer->getAlignment(_vulkan._device);
+
+	if(currentTopLevelAccelStructure->isUpdateable())
+	{
+		currentTopLevelAccelStructure->cmdUpdateTLAS(_accelerationStructure._instanceTransferCache.size(),
+			firstAddress, addressAlignemnt, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
+	}
+	else
+	{
+		currentTopLevelAccelStructure->cmdBuildTLAS(_accelerationStructure._instanceTransferCache.size(),
+			firstAddress, addressAlignemnt, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
+	}
+
+	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
 
 	updateRaytraceDescripotrSets();
 
@@ -1356,17 +1386,18 @@ void Raytracer::initDataBuffers()
 	_cameraBuffers.resize(_concurrencyCount);
 	_globalRenderDataBuffers.resize(_concurrencyCount);
 	_drawIndirectCommandBuffer.resize(_concurrencyCount);
-	_instanceIndexBuffers.resize(_concurrencyCount);
-	_instanceIndexTransferBuffers.resize(_concurrencyCount);
+
+	_accelerationStructure.topLevelAccelStructures.resize(_concurrencyCount);
+	_accelerationStructure.instanceBuffers.resize(_concurrencyCount);
 
 	for(unsigned int i = 0; i<_concurrencyCount; i++)
 	{
-		_drawDataIsntanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxDrawCount * sizeof(DrawData), _vulkan._generalPurposeAllocator);
-		_drawIndirectCommandBuffer[i] = VGM::Buffer(VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, _maxDrawCount * sizeof(VkDrawIndexedIndirectCommand), _vulkan._generalPurposeAllocator);
-		_cameraBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraData), _vulkan._generalPurposeAllocator);
-		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
-		_instanceIndexBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, _maxDrawCount * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
-		_instanceIndexTransferBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, _maxDrawCount * sizeof(uint32_t), _vulkan._generalPurposeAllocator);
+		_drawDataIsntanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxDrawCount * sizeof(DrawData), _vulkan._generalPurposeAllocator, _vulkan._device);
+		_drawIndirectCommandBuffer[i] = VGM::Buffer(VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, _maxDrawCount * sizeof(VkDrawIndexedIndirectCommand), _vulkan._generalPurposeAllocator, _vulkan._device);
+		_cameraBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraData), _vulkan._generalPurposeAllocator, _vulkan._device);
+		_globalRenderDataBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator, _vulkan._device);
+		_accelerationStructure.instanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+			| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, sizeof(VkAccelerationStructureInstanceKHR) * _maxDrawCount, _vulkan._generalPurposeAllocator, _vulkan._device);
 	}
 
 	
@@ -1379,8 +1410,8 @@ void Raytracer::initLightBuffers()
 	_spotLightBuffers.resize(_concurrencyCount);
 	for(unsigned int i = 0; i<_concurrencyCount; i++)
 	{
-		_pointLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(PointLight), _vulkan._generalPurposeAllocator);
-		_sunLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(SunLight), _vulkan._generalPurposeAllocator);
-		_spotLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(SpotLight), _vulkan._generalPurposeAllocator);
+		_pointLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(PointLight), _vulkan._generalPurposeAllocator, _vulkan._device);
+		_sunLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(SunLight), _vulkan._generalPurposeAllocator, _vulkan._device);
+		_spotLightBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, _maxPointLighst * sizeof(SpotLight), _vulkan._generalPurposeAllocator, _vulkan._device);
 	}
 }

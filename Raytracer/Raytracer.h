@@ -64,8 +64,9 @@ struct MeshBuffer
 struct AccelerationStructure
 {
 	std::vector<BLAS> bottomLevelAccelStructures;
-	TLAS topLevelAccelStructure;
-	VGM::Buffer instanceBuffer;
+	std::vector<TLAS> topLevelAccelStructures;
+	std::vector<VGM::Buffer> instanceBuffers;
+	std::vector<VkAccelerationStructureInstanceKHR> _instanceTransferCache;
 };
 
 struct Material
@@ -86,10 +87,12 @@ struct Mesh
 	Material material = {};
 };
 
-struct Instance
+struct MeshInstance
 {
 	uint32_t blasIndex;
 	uint32_t meshIndex;
+	uint32_t materialIndex;
+	uint32_t instanceID;
 };
 
 struct DrawData
@@ -171,11 +174,15 @@ public:
 
 	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const std::string& name);
 	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels, const std::string& name);
-	
-	//future features
-	//void batchUploadMeshes();
-	//void batchUploadTextures();
-	
+
+	MeshInstance getMeshInstance(const std::string& name);
+
+	void uploadMeshes();
+	void uploadTextures();
+
+	//update tlas and place draw call;
+	void drawMeshInstance(MeshInstance instance, glm::mat4 transform);
+
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
 	void drawPointLight(PointLight light);
@@ -205,8 +212,7 @@ private:
 	void initTextureArrays();
 	void initShaderBindingTable();
 
-	void loadDummyMeshInstance();
-	void initTLAS();
+	void loadPlaceholderMeshAndTexture();
 
 	void updateGBufferDescriptorSets();
 	void updateDefferedDescriptorSets();
@@ -223,11 +229,14 @@ private:
 	uint32_t windowWidth;
 	uint32_t windowHeight;
 
+	uint32_t nativeRenderingReselutionX;
+	uint32_t nativeRenderingReselutionY;
+
 	uint32_t _concurrencyCount = 3;
-	uint32_t _maxDrawCount = 1000;
+	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
-	uint32_t _maxMipMapLevels = 1;
+	uint32_t _maxMipMapLevels = 4;
 	uint64_t _timeout = 100000000;
 	uint32_t _maxSunLights = 10;
 	uint32_t _maxPointLighst = 10;
@@ -239,7 +248,8 @@ private:
 
 	std::vector<Mesh> _meshes;
 	std::unordered_map<std::string, uint32_t> _loadedMeshes;
-	std::vector<Instance> _activeInstances;
+	
+	std::vector<Material> _materials;
 
 	MeshBuffer _meshBuffer;
 	AccelerationStructure _accelerationStructure;
@@ -288,7 +298,6 @@ private:
 	std::vector<VGM::Buffer> _instanceIndexBuffers;
 	std::vector<VGM::Buffer> _instanceIndexTransferBuffers;
 
-	std::vector<uint32_t> _instanceIndexTransferCache;
 
 	std::vector<VGM::Buffer> _sunLightBuffers;
 	std::vector<VGM::Buffer> _pointLightBuffers;

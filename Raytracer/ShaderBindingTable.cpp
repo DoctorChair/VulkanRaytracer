@@ -15,7 +15,7 @@ ShaderBindingTable::ShaderBindingTable(uint32_t shaderGroupCount, uint32_t group
 	_sbtBuffer = VGM::Buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
 		| VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR
-		, sbtSize, allocator);
+		, sbtSize, allocator, device);
 
 	 void* ptr = _sbtBuffer.map(allocator);
 
@@ -33,7 +33,7 @@ ShaderBindingTable::ShaderBindingTable(uint32_t shaderGroupCount, uint32_t group
 
 	r = alignedGroupHandleSize % shaderGroupBaseAlignment;
 	_rgenRegion.deviceAddress = _sbtBuffer.getDeviceAddress(device);
-	_rgenRegion.stride = (r==0) ? alignedGroupHandleSize : alignedGroupHandleSize + (shaderGroupBaseAlignment - r);
+	_rgenRegion.stride = (r == 0) ? alignedGroupHandleSize : alignedGroupHandleSize + (shaderGroupBaseAlignment - r);
 	_rgenRegion.size = _rgenRegion.stride;
 
 	r = (alignedGroupHandleSize * missCount) % shaderGroupBaseAlignment;
