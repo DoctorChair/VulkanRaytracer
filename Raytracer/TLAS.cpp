@@ -67,11 +67,35 @@ void TLAS::cmdBuildTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAdd
 
 	vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &build, &pRangeInfo);
 
-	_structureActive = true;
+	_activeInstanceCount = instanceCount;
+
+	_scratchBufferAddress = scratchAddress;
+
+	_isActive = true;
 }
 
-void TLAS::cmdUpdateTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, VkDeviceSize addressAlignment, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer)
+void TLAS::cmdUpdateTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAddresses, VkPhysicalDevice physicalDevice, VkDevice device, VmaAllocator allocator, VkCommandBuffer commandBuffer)
 {
+	if(instanceCount > _activeInstanceCount)
+	{
+		if (_isActive)
+		{
+			vkDestroyAccelerationStructureKHR(device, _tlas, nullptr);
+			_scratchBuffer.destroy(allocator);
+			_tlasBuffer.destroy(allocator);
+		}
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties = {};
+		accelProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+		VkPhysicalDeviceProperties2 features = {};
+		features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		features.pNext = &accelProperties;
+
+		vkGetPhysicalDeviceProperties2(physicalDevice, &features);
+
+		cmdBuildTLAS(instanceCount, firstInstanceAddresses, accelProperties.minAccelerationStructureScratchOffsetAlignment, device, allocator, commandBuffer);
+		return;
+	}
+
 	VkAccelerationStructureBuildRangeInfoKHR range;
 	range.primitiveCount = instanceCount;
 	range.firstVertex = 0;
@@ -106,19 +130,9 @@ void TLAS::cmdUpdateTLAS(uint32_t instanceCount, VkDeviceAddress firstInstanceAd
 
 	vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build, &range.primitiveCount, &size);
 
-	VkAccelerationStructureCreateInfoKHR createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-	createInfo.pNext = nullptr;
-	createInfo.type = build.type;
-	createInfo.size = size.accelerationStructureSize;
-	createInfo.buffer = _tlasBuffer.get();
-	createInfo.offset = 0;
-
-	vkCreateAccelerationStructureKHR(device, &createInfo, nullptr, &_tlas);
-
 	build.dstAccelerationStructure = _tlas;
 
-	build.scratchData.deviceAddress = _scratchBuffer.getDeviceAddress(device);
+	build.scratchData.deviceAddress = _scratchBufferAddress;
 
 	VkAccelerationStructureBuildRangeInfoKHR* pRangeInfo = &range;
 
@@ -136,10 +150,4 @@ VkAccelerationStructureKHR* TLAS::get()
 {
 	return &_tlas;
 }
-
-bool TLAS::isUpdateable()
-{
-	return _structureActive;
-}
-
 

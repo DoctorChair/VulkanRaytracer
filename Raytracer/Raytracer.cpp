@@ -333,26 +333,31 @@ void Raytracer::drawMeshInstance(MeshInstance meshInstance, glm::mat4 transform)
 	_drawCommandTransferCache.push_back(command);
 	_drawDataTransferCache.push_back({ transform, material , 0 });
 
+	transform = glm::transpose(transform);
+
 	VkAccelerationStructureInstanceKHR instace = {};
 	instace.transform.matrix[0][0] = transform[0][0];
 	instace.transform.matrix[0][1] = transform[0][1];
 	instace.transform.matrix[0][2] = transform[0][2];
-	
+	instace.transform.matrix[0][3] = transform[0][3];
+
 	instace.transform.matrix[1][0] = transform[1][0];
 	instace.transform.matrix[1][1] = transform[1][1];
 	instace.transform.matrix[1][2] = transform[1][2];
-	
+	instace.transform.matrix[1][3] = transform[1][3];
+
 	instace.transform.matrix[2][0] = transform[2][0];
 	instace.transform.matrix[2][1] = transform[2][1];
-	instace.transform.matrix[2][2] = transform[2][2];
+	instace.transform.matrix[2][2] = transform[1][1];
+	instace.transform.matrix[2][3] = transform[2][3];
 
-	instace.transform.matrix[2][3] = 1.0f;
+
 	instace.accelerationStructureReference = _accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex].getAddress(_vulkan._device);
 	instace.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 	instace.instanceCustomIndex = 0;
 	instace.mask = 0xFF;
 	instace.instanceShaderBindingTableRecordOffset = 0;
-
+	
 	_accelerationStructure._instanceTransferCache.push_back(instace);
 }
 
@@ -862,7 +867,8 @@ void Raytracer::executeRaytracePass()
 	VkDescriptorSet sets[] = {
 		_globalDescriptorSets[_currentFrameIndex],
 		_raytracer1DescriptorSets[_currentFrameIndex],
-		_raytracer2DescriptorSets[_currentFrameIndex]
+		_raytracer2DescriptorSets[_currentFrameIndex],
+		_lightDescripotrSets[_currentFrameIndex]
 	};
 
 	raytraceCmd->begin(nullptr, 0, _vulkan._device);
@@ -877,26 +883,9 @@ void Raytracer::executeRaytracePass()
 
 	VkDeviceAddress firstAddress = currentInstanceBuffer->getDeviceAddress(_vulkan._device);
 
-	if(currentTopLevelAccelStructure->isUpdateable())
-	{
-		currentTopLevelAccelStructure->cmdUpdateTLAS(_accelerationStructure._instanceTransferCache.size(),
-			firstAddress, 0, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
-	}
-	else
-	{
-		VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties = {};
-		accelProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
-		VkPhysicalDeviceProperties2 features = {};
-		features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-		features.pNext = &accelProperties;
-
-		vkGetPhysicalDeviceProperties2(_vulkan._physicalDevice, &features);
-		uint32_t minAlignment = accelProperties.minAccelerationStructureScratchOffsetAlignment;
-
-		currentTopLevelAccelStructure->cmdBuildTLAS(_accelerationStructure._instanceTransferCache.size(),
-			firstAddress, minAlignment, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
-	}
-
+	currentTopLevelAccelStructure->cmdUpdateTLAS(_accelerationStructure._instanceTransferCache.size(),
+		firstAddress, _vulkan._physicalDevice, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
+	
 	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
 		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
 
@@ -914,7 +903,7 @@ void Raytracer::executeRaytracePass()
 		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
 
 	_raytraceShader.cmdBind(raytraceCmd->get());
-	vkCmdBindDescriptorSets(raytraceCmd->get(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _raytracePipelineLayout, 0, 3, sets, 0, nullptr);
+	vkCmdBindDescriptorSets(raytraceCmd->get(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _raytracePipelineLayout, 0, 4, sets, 0, nullptr);
 
 	VkStridedDeviceAddressRegionKHR callableRegion = {};
 	VkStridedDeviceAddressRegionKHR raygenRegion = _shaderBindingTable.getRaygenRegion();
@@ -933,6 +922,8 @@ void Raytracer::executeRaytracePass()
 	raytraceCmd->end();
 
 	raytraceCmd->submit(nullptr, 0, nullptr, 0, nullptr, raytraceFence, _vulkan._computeQueue);
+
+	_accelerationStructure._instanceTransferCache.clear();
 }
 
 void Raytracer::executeCompositPass()
@@ -1094,9 +1085,9 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_defferedLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_lightLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1262,11 +1253,12 @@ void Raytracer::initDefferedShader()
 
 void Raytracer::initRaytraceShader()
 {
-	VkDescriptorSetLayout layouts[] = { _globalLayout ,_raytracerLayout1, _raytracerLayout2 };
+	VkDescriptorSetLayout layouts[] = { _globalLayout ,_raytracerLayout1, _raytracerLayout2, _lightLayout};
 
 	std::vector<std::pair<std::string, VkShaderStageFlagBits>> sources = {
 		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRGEN.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR},
 		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceShadowRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
 		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRCHIT.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR} };
 
 	VkPipelineLayoutCreateInfo createInfo = {};
@@ -1274,7 +1266,7 @@ void Raytracer::initRaytraceShader()
 	createInfo.pNext = nullptr;
 	createInfo.flags = 0;
 	createInfo.pushConstantRangeCount = 0;
-	createInfo.setLayoutCount = 3;
+	createInfo.setLayoutCount = 4;
 	createInfo.pSetLayouts = layouts;
 
 	vkCreatePipelineLayout(_vulkan._device, &createInfo, nullptr, &_raytracePipelineLayout);

@@ -22,8 +22,8 @@ public:
 private:
 	VkPipeline _raytracingPipeline;
 	uint32_t _shaderGroupCount = 0;
-	uint32_t _missCount = 1;
-	uint32_t _hitCount = 1;
+	uint32_t _missCount = 0;
+	uint32_t _hitCount = 0;
 
 	std::vector<VkSampler> _samplers;
 

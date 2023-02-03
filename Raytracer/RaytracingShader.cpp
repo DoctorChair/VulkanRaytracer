@@ -41,11 +41,13 @@ RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderSt
 		{
 			group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
 			group.closestHitShader = shaderStages.size() - 1;
+			_hitCount++;
 		}
 		if(s.second == VK_SHADER_STAGE_MISS_BIT_KHR)
 		{
 			group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
 			group.generalShader = shaderStages.size() - 1;
+			_missCount++;
 		}
 
 		shaderGroups.push_back(group);
