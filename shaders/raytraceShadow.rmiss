@@ -6,5 +6,5 @@ layout(location = 1) rayPayloadEXT float shadowed;
 
 void main()
 {
-  shadowed = 1.0;
+  shadowed = 0.1;
 }
