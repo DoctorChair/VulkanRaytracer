@@ -7,9 +7,9 @@ struct hitPayload
   vec3 hitValue;
 };
 
-layout(location = 0) rayPayloadInEXT hitPayload prd;
+layout(location = 1) rayPayloadInEXT hitPayload prd;
 
 void main()
 {
-  prd.hitValue = vec3(0.0, 0.0, 0.0);
+  
 }

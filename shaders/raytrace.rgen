@@ -30,8 +30,8 @@ struct SpotLight
 	float strength;
 };
 
-layout(location = 0) rayPayloadEXT hitPayload prd;
-layout(location = 1) rayPayloadEXT float shadowed;
+layout(location = 1) rayPayloadEXT hitPayload prd;
+layout(location = 0) rayPayloadEXT bool shadowed;
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 viewMatrix;
@@ -90,13 +90,11 @@ void main()
     vec3 outgoingdirection = reflect(incommingDirection, normal.xyz);
 
     uint  rayFlags = gl_RayFlagsOpaqueEXT;
-    uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT;// | gl_RayFlagsSkipClosestHitShaderEXT;
+    uint  shadowRayFlags =  gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
     float tMin     = 0.001;
     float tMax     = 10000.0;
 
-    float e = 0.001;
-
-    vec4 outColor = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 outColor = vec4(0.0, 1.0, 0.0, 1.0);
 
     vec2 d = inUV * 2.0 - 1.0;
     vec4 origin    = cameraData.inverseViewMatrix * vec4(0, 0, 0, 1);
@@ -104,45 +102,39 @@ void main()
     vec4 direction = cameraData.inverseViewMatrix * vec4(normalize(target.xyz), 0);
 
 
-
+    for(uint i = 0; i < 1; i++)
+    {
+      outColor = color;
       vec3 lightDirection = pointLightBuffer.pointLights[0].position - samplePosition.xyz;
       float range = length(lightDirection);
       lightDirection = normalize(lightDirection);
       normal.xyz = normalize(normal.xyz);
       float cosTheta = dot(lightDirection, normal.xyz);
-      outColor.xyz = vec3(0.0, 0.0, 1.0);
 
-      outColor = color;
-
+      shadowed = true;
       if(cosTheta > 0)
       {
-          traceRayEXT(topLevelAS, // acceleration structure
-          shadowRayFlags,       // rayFlags
-          0xFF,           // cullMask
-          0,              // sbtRecordOffset
-          0,              // sbtRecordStride
-          0,              // missIndex
-          samplePosition.xyz + (lightDirection*e),     // ray origin
-          tMin,           // ray min range
-          lightDirection.xyz,  // ray direction
-          range,           // ray max range
-          0               // payload (location = 1)
-          );
-
-          outColor.xyz = color.xyz * prd.hitValue;
+        traceRayEXT(topLevelAS, // acceleration structure
+        shadowRayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        1,              // missIndex
+        samplePosition.xyz,     // ray origin
+        tMin,           // ray min range
+        lightDirection.xyz,  // ray direction
+        range,           // ray max range
+        0               // payload (location = 1)
+        );
+      
+        if(shadowed)
+        {
+          outColor.xyz = outColor.xyz * 0.0;
+        }
       }
+    }
 
-   /* traceRayEXT(topLevelAS, // acceleration structure
-          rayFlags,       // rayFlags
-          0xFF,           // cullMask
-          0,              // sbtRecordOffset
-          0,              // sbtRecordStride
-          0,              // missIndex
-          samplePosition.yxz,     // ray origin
-          tMin,           // ray min range
-          outgoingdirection.xyz,  // ray direction
-          tMax,           // ray max range
-          0               // payload (location = 1)
-          ); */
+    
+   
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

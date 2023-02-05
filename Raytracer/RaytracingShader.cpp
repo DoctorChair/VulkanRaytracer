@@ -93,9 +93,9 @@ VkResult RaytracingShader::getShaderHandles(std::vector<uint8_t>& handles, VkDev
 		alignedGroupHandleSize = alignedGroupHandleSize + (handleAlignment - r);
 	}
 
-	handles.resize(alignedGroupHandleSize * _shaderGroupCount);
+	handles.resize(groupHandleSize * _shaderGroupCount);
 
-	return vkGetRayTracingShaderGroupHandlesKHR(device, _raytracingPipeline, 0, _shaderGroupCount, alignedGroupHandleSize * _shaderGroupCount, handles.data());
+	return vkGetRayTracingShaderGroupHandlesKHR(device, _raytracingPipeline, 0, _shaderGroupCount, groupHandleSize * _shaderGroupCount, handles.data());
 }
 
 uint32_t RaytracingShader::shaderGroupCount()
