@@ -3,9 +3,9 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
 
-layout(location = 0) rayPayloadInEXT bool shadowed;
+layout(location = 0) rayPayloadInEXT float shadowed;
 
 void main()
 {
-  shadowed = false;
+  shadowed = 1.0;
 }

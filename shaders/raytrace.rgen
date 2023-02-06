@@ -30,8 +30,6 @@ struct SpotLight
 	float strength;
 };
 
-layout(location = 1) rayPayloadEXT hitPayload prd;
-layout(location = 0) rayPayloadEXT bool shadowed;
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 viewMatrix;
@@ -70,6 +68,10 @@ layout(std140, set = 3, binding = 2) readonly buffer SpotBuffer{
 
 	SpotLight spotLights[];
 } spotLightBuffer; 
+
+layout(location = 0) rayPayloadEXT float shadowed;
+layout(location = 1) rayPayloadEXT hitPayload prd;
+
 
 
 void main()
@@ -111,7 +113,7 @@ void main()
       normal.xyz = normalize(normal.xyz);
       float cosTheta = dot(lightDirection, normal.xyz);
 
-      shadowed = true;
+      shadowed = 0.3;
       if(cosTheta > 0)
       {
         traceRayEXT(topLevelAS, // acceleration structure
@@ -127,14 +129,24 @@ void main()
         0               // payload (location = 1)
         );
       
-        if(shadowed)
-        {
-          outColor.xyz = outColor.xyz * 0.0;
-        }
+        outColor.xyz = outColor.xyz * shadowed;
       }
     }
 
+    traceRayEXT(topLevelAS, // acceleration structure
+        rayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        0,              // missIndex
+        samplePosition.xyz,     // ray origin
+        tMin,           // ray min range
+        outgoingdirection.xyz,  // ray direction
+        tMax,           // ray max range
+        1               // payload (location = 1)
+        );
     
-   
+    outColor.xyz = prd.hitValue; 
+
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

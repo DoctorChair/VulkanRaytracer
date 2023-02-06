@@ -36,7 +36,7 @@ ShaderBindingTable::ShaderBindingTable(uint32_t groupHandleSize, uint32_t handle
 
 	uint8_t* ptr = reinterpret_cast<uint8_t*>(_sbtBuffer.map(allocator));
 	uint8_t* pData = nullptr;
-	uint32_t handleIndex = 1;
+	uint32_t handleIndex = 0;
 
 	pData = ptr;
 	_sbtBuffer.memcopy(pData, shaderHandels.data() + handleIndex * groupHandleSize, groupHandleSize);
@@ -49,7 +49,6 @@ ShaderBindingTable::ShaderBindingTable(uint32_t groupHandleSize, uint32_t handle
 		pData = pData + _missRegion.stride;
 	}
 
-	
 	pData = ptr + _rgenRegion.size + _missRegion.size;
 	for(unsigned int i = 0; i<hitCount; i++)
 	{
