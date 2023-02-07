@@ -1,60 +1,78 @@
 #include "ShaderBindingTable.h"
 #include <memory>
+#include <iostream>
 
-ShaderBindingTable::ShaderBindingTable(uint32_t groupHandleSize, uint32_t handleAlignment, std::vector<uint8_t>& shaderHandels, uint32_t shaderGroupBaseAlignment, 
-	uint32_t missCount, uint32_t hitCount, VkDevice device, VmaAllocator allocator)
+ShaderBindingTable::ShaderBindingTable(VkPipeline raytracePipeline,
+	uint32_t missCount, uint32_t hitCount, VkDevice device, VkPhysicalDevice physicalDevice, VmaAllocator allocator)
 {
-	uint32_t alignedGroupHandleSize = groupHandleSize;
-	uint32_t r = groupHandleSize % handleAlignment;
-	if(r > 0)
-	{
-		alignedGroupHandleSize = alignedGroupHandleSize + (handleAlignment - r);
-	}
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR pipelineProperties = {};
+	pipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+	pipelineProperties.pNext = nullptr;
+	VkPhysicalDeviceProperties2 properties2{};
+	properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+	properties2.pNext = &pipelineProperties;
+	vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
 
-	r = alignedGroupHandleSize % shaderGroupBaseAlignment;
-	_rgenRegion.stride = (r == 0) ? alignedGroupHandleSize : alignedGroupHandleSize + (shaderGroupBaseAlignment - r);
-	_rgenRegion.size = _rgenRegion.stride;
-	r = (alignedGroupHandleSize * missCount) % shaderGroupBaseAlignment;
-	_missRegion.stride = alignedGroupHandleSize;
-	_missRegion.size = (r == 0) ? alignedGroupHandleSize * missCount : alignedGroupHandleSize * missCount + (shaderGroupBaseAlignment - r);
-	r = (alignedGroupHandleSize * hitCount) % shaderGroupBaseAlignment;
-	_hitRegion.stride = alignedGroupHandleSize;
-	_hitRegion.size = (r == 0) ? alignedGroupHandleSize * hitCount : alignedGroupHandleSize * hitCount + (shaderGroupBaseAlignment - r);
+	uint32_t grouphandleAlignment = pipelineProperties.shaderGroupHandleAlignment;
+	uint32_t groupHandleSize = pipelineProperties.shaderGroupHandleSize;
+	uint32_t groupBaseAlignment = pipelineProperties.shaderGroupBaseAlignment;
 
-	VkDeviceSize sbtSize = _rgenRegion.size + _missRegion.size + _hitRegion.size;
 
-	_sbtBuffer = VGM::Buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-		| VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR
-		, sbtSize, allocator, device);
+	size_t count = static_cast<size_t>(1) + missCount + hitCount;
 
-	VkDeviceAddress stbAddress = _sbtBuffer.getDeviceAddress(device);
-
-	_rgenRegion.deviceAddress = stbAddress;
-	_missRegion.deviceAddress = stbAddress + _rgenRegion.size;
-	_hitRegion.deviceAddress = stbAddress + _rgenRegion.size + _missRegion.size;
-
-	uint8_t* ptr = reinterpret_cast<uint8_t*>(_sbtBuffer.map(allocator));
-	uint8_t* pData = nullptr;
-	uint32_t handleIndex = 0;
-
-	pData = ptr;
-	_sbtBuffer.memcopy(pData, shaderHandels.data() + handleIndex * groupHandleSize, groupHandleSize);
+	std::vector<uint8_t> shaderGroupHandels(count * groupHandleSize);
 	
-	pData = ptr + _rgenRegion.size;
-	for(unsigned int i = 0; i<missCount; i++)
+	vkGetRayTracingShaderGroupHandlesKHR(device, raytracePipeline, 0, count,
+		count * groupHandleSize, shaderGroupHandels.data());
+
+	auto align = [&](uint32_t input, uint32_t alignment)
 	{
-		handleIndex++;
-		_sbtBuffer.memcopy(pData, shaderHandels.data() + handleIndex * groupHandleSize, groupHandleSize);
-		pData = pData + _missRegion.stride;
+		uint32_t r = input % alignment;
+		return (r == 0) ? input : input + (alignment - r);
+	};
+
+	uint32_t alignedGroupHandleSize = align(groupHandleSize, grouphandleAlignment);
+
+	_rgenRegion.stride = align(alignedGroupHandleSize, groupBaseAlignment);
+	_rgenRegion.size = _rgenRegion.stride;
+
+	_missRegion.stride = alignedGroupHandleSize;
+	_missRegion.size = align(alignedGroupHandleSize * missCount, groupBaseAlignment);
+
+	_hitRegion.stride = alignedGroupHandleSize;
+	_hitRegion.size = align(alignedGroupHandleSize * hitCount, groupBaseAlignment);
+
+	VkDeviceSize sbtBufferSize = _rgenRegion.size + _missRegion.size + _hitRegion.size;
+
+	_sbtBuffer = VGM::Buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+		| VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR, sbtBufferSize, allocator, device);
+	
+	VkDeviceAddress sbtAddress = _sbtBuffer.getDeviceAddress(device);
+
+	_rgenRegion.deviceAddress = sbtAddress;
+	_missRegion.deviceAddress = sbtAddress + _rgenRegion.size;
+	_hitRegion.deviceAddress = sbtAddress + _rgenRegion.size + _missRegion.size;
+
+	auto getHandle = [&](int index) {return shaderGroupHandels.data() + index * groupHandleSize; };
+
+	void* ptr = _sbtBuffer.map(allocator);
+	uint8_t* pSBT = reinterpret_cast<uint8_t*>(ptr);
+	uint32_t groupHandleIndex = 0;
+
+	_sbtBuffer.memcopy(pSBT, getHandle(groupHandleIndex++), groupHandleSize);
+
+	pSBT = reinterpret_cast<uint8_t*>(ptr) + _rgenRegion.size;
+	for(unsigned int i = 0; i < missCount; i++)
+	{
+		_sbtBuffer.memcopy(pSBT, getHandle(groupHandleIndex++), groupHandleSize);
+		pSBT = pSBT + _missRegion.stride;
 	}
 
-	pData = ptr + _rgenRegion.size + _missRegion.size;
-	for(unsigned int i = 0; i<hitCount; i++)
+	pSBT = reinterpret_cast<uint8_t*>(ptr) + _rgenRegion.size + _missRegion.size;
+	for (unsigned int i = 0; i < hitCount; i++)
 	{
-		handleIndex++;
-		_sbtBuffer.memcopy(pData, shaderHandels.data() + handleIndex * groupHandleSize, groupHandleSize);
-		pData = pData + _hitRegion.stride;
+		_sbtBuffer.memcopy(pSBT, getHandle(groupHandleIndex++), groupHandleSize);
+		pSBT = pSBT + _hitRegion.stride;
 	}
 
 	_sbtBuffer.unmap(allocator);

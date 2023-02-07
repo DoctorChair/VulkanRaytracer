@@ -81,7 +81,7 @@ void Raytracer::init(SDL_Window* window)
 	initPresentFramebuffers();
 	initMeshBuffer();
 	initTextureArrays();
-	loadPlaceholderMeshAndTexture();
+	loadPlaceholderMeshAndTexture();	
 }
 
 Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const std::string& name)
@@ -354,7 +354,7 @@ void Raytracer::drawMeshInstance(MeshInstance meshInstance, glm::mat4 transform)
 
 	instace.accelerationStructureReference = _accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex].getAddress(_vulkan._device);
 	instace.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-	instace.instanceCustomIndex = static_cast<uint32_t>(_drawCommandTransferCache.size() - 1);
+	instace.instanceCustomIndex = 0;
 	instace.mask = 0xFF;
 	instace.instanceShaderBindingTableRecordOffset = 0;
 	
@@ -400,6 +400,7 @@ void Raytracer::setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm:
 
 void Raytracer::update()
 {
+	
 	_currentSwapchainIndex = _vulkan.aquireNextImageIndex(VK_NULL_HANDLE, _frameSynchroStructs[_currentFrameIndex]._presentSemaphore);
 
 	executeDefferedPass();
@@ -462,20 +463,8 @@ void Raytracer::initTextureArrays()
 
 void Raytracer::initShaderBindingTable()
 {
-	VkPhysicalDeviceRayTracingPipelinePropertiesKHR pipelineProperties = {};
-	pipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
-	pipelineProperties.pNext = nullptr;
-	VGM::getPhysicalDeviceProperties2(_vulkan._physicalDevice, &pipelineProperties);
-
-	uint32_t groupAlignment = pipelineProperties.shaderGroupHandleAlignment;
-	uint32_t groupHandleSize = pipelineProperties.shaderGroupHandleSize;
-	uint32_t groupBaseAlignment = pipelineProperties.shaderGroupBaseAlignment;
-
-	std::vector<uint8_t> shaderGroupHandels;
-	_raytraceShader.getShaderHandles(shaderGroupHandels, _vulkan._device, groupHandleSize, groupAlignment);
-
-	_shaderBindingTable = ShaderBindingTable(groupHandleSize, groupAlignment, shaderGroupHandels, groupBaseAlignment, 
-		_raytraceShader.missShaderCount(), _raytraceShader.hitShaderCount(), _vulkan._device, _vulkan._generalPurposeAllocator);
+	_shaderBindingTable = ShaderBindingTable(_raytraceShader.get(), _raytraceShader.missShaderCount(), _raytraceShader.hitShaderCount(),
+		_vulkan._device, _vulkan._physicalDevice, _vulkan._generalPurposeAllocator);
 }
 
 void Raytracer::loadPlaceholderMeshAndTexture()
@@ -710,7 +699,8 @@ void Raytracer::executeDefferedPass()
 	_globalRenderData.sunLightCount = static_cast<uint32_t>(_sunLightTransferCache.size());
 	_globalRenderData.pointLightCout = static_cast<uint32_t>(_pointLightTransferCache.size());
 	_globalRenderData.spotLightCount = static_cast<uint32_t>(_spotLightTransferCache.size());
-	
+	_globalRenderData.maxRecoursionDepth = _maxRecoursionDepth;
+
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&_globalRenderData, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
 
@@ -1127,7 +1117,7 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout1);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
@@ -1286,11 +1276,11 @@ void Raytracer::initRaytraceShader()
 	VkDescriptorSetLayout layouts[] = { _globalLayout ,_raytracerLayout1, _raytracerLayout2, _lightLayout, _gBufferLayout1, _gBufferLayout2, _textureLayout};
 
 	std::vector<std::pair<std::string, VkShaderStageFlagBits>> sources = {
-		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRGEN.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR},
-		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRGEN.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
 		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceShadowRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
-		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceRCHIT.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR} };
-
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRCHIT.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR} };
+	
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	createInfo.pNext = nullptr;
@@ -1301,7 +1291,7 @@ void Raytracer::initRaytraceShader()
 
 	vkCreatePipelineLayout(_vulkan._device, &createInfo, nullptr, &_raytracePipelineLayout);
 	
-	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, _maxRecoursionDepth, 4);
+	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, 10, 4);
 }
 
 void Raytracer::initCompositingShader()

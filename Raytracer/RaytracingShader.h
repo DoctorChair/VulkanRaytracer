@@ -16,6 +16,7 @@ public:
 	uint32_t missShaderCount();
 	uint32_t hitShaderCount();
 	std::vector<VkSampler>& getSamplers();
+	VkPipeline get();
 
 	void destroy(VkDevice device);
 

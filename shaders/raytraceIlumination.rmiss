@@ -4,11 +4,12 @@
 struct hitPayload
 {
   vec3 hitValue;
+  int depth;
 };
 
 layout(location = 1) rayPayloadInEXT hitPayload prd;
 
 void main()
 {
-  prd.hitValue = vec3(0.0, 0.0, 1.0);
+  
 }

@@ -19,6 +19,7 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint sunLightCount;
 	uint pointLightCount;
 	uint spotLightCount;
+	uint maxRecoursionDepth;
 } globalDrawData;
 
 

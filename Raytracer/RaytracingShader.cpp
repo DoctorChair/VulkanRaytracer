@@ -11,8 +11,8 @@ RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderSt
 	for(auto& s : shaderSources)
 	{
 		VkShaderModule module;
-		if(VGM::createShaderModule(s.first, module, device)!=VK_SUCCESS)
-			throw std::runtime_error("Failed to shader Module!");
+		if(VGM::createShaderModule(s.first, module, device) != VK_SUCCESS)
+			throw std::runtime_error("Failed to load shader Module!");
 
 		VkPipelineShaderStageCreateInfo stage = {};
 		stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -27,10 +27,11 @@ RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderSt
 		VkRayTracingShaderGroupCreateInfoKHR group = {};
 		group.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		group.pNext = nullptr;
+		group.generalShader = VK_SHADER_UNUSED_KHR;
 		group.anyHitShader = VK_SHADER_UNUSED_KHR;
 		group.closestHitShader = VK_SHADER_UNUSED_KHR;
-		group.anyHitShader = VK_SHADER_UNUSED_KHR;
 		group.intersectionShader = VK_SHADER_UNUSED_KHR;
+		
 
 		if(s.second == VK_SHADER_STAGE_RAYGEN_BIT_KHR)
 		{
@@ -59,12 +60,12 @@ RaytracingShader::RaytracingShader(std::vector<std::pair<std::string, VkShaderSt
 	createInfo.flags = 0;
 	createInfo.layout = layout;
 	createInfo.maxPipelineRayRecursionDepth = maxRecoursionDepth;
-	createInfo.groupCount = shaderGroups.size();
+	createInfo.groupCount = static_cast<uint32_t>(shaderGroups.size());
 	createInfo.pGroups = shaderGroups.data();
-	createInfo.stageCount = shaderStages.size();
+	createInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
 	createInfo.pStages = shaderStages.data();
 
-	vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &createInfo, nullptr, &_raytracingPipeline);
+	vkCreateRayTracingPipelinesKHR(device, {}, {}, 1, &createInfo, nullptr, &_raytracingPipeline);
 
 	_shaderGroupCount = shaderGroups.size();
 
@@ -116,6 +117,11 @@ uint32_t RaytracingShader::hitShaderCount()
 std::vector<VkSampler>& RaytracingShader::getSamplers()
 {
 	return _samplers;
+}
+
+VkPipeline RaytracingShader::get()
+{
+	return _raytracingPipeline;
 }
 
 void RaytracingShader::destroy(VkDevice device)

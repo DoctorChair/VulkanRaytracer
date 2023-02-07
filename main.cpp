@@ -21,18 +21,18 @@ int main(int argc, char* argv[])
 
 	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
 
-	//ModelData backpack = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
+	ModelData backpack = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
 
 	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
 
-	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_002.gltf");
+	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_002.gltf");
 
 	int i = 0;
 
 	std::vector<Mesh> testScene;
 
 	std::vector<MeshInstance> instances;
-	for(auto& m : sponza.meshes)
+	for(auto& m : backpack.meshes)
 	{
 		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices, m.name));
 		
@@ -162,7 +162,7 @@ int main(int argc, char* argv[])
 		for(unsigned int i = 0; i<testScene.size(); i++)
 		{
 			//raytracer.drawMesh(testScene[i], sponza.meshes[i].transform, id);
-			raytracer.drawMeshInstance(instances[i], sponza.meshes[i].transform);
+			raytracer.drawMeshInstance(instances[i], backpack.meshes[i].transform);
 			id++;
 		}
 		

@@ -9,8 +9,8 @@ class ShaderBindingTable
 {
 public:
 	ShaderBindingTable() = default;
-	ShaderBindingTable(uint32_t groupHandleSize, uint32_t handleAlignment, std::vector<uint8_t>& shaderHandels, uint32_t shaderGroupBaseAlignment, 
-		uint32_t missCount, uint32_t hitCount, VkDevice device, VmaAllocator allocator);
+	ShaderBindingTable(VkPipeline raytracePipeline,
+		uint32_t missCount, uint32_t hitCount, VkDevice device, VkPhysicalDevice physicalDevice, VmaAllocator allocator);
 
 	VkStridedDeviceAddressRegionKHR getRaygenRegion();
 	VkStridedDeviceAddressRegionKHR getMissRegion();
@@ -18,6 +18,7 @@ public:
 
 private:
 	VGM::Buffer _sbtBuffer;
+
 	VkStridedDeviceAddressRegionKHR _rgenRegion;
 	VkStridedDeviceAddressRegionKHR _missRegion;
 	VkStridedDeviceAddressRegionKHR _hitRegion;

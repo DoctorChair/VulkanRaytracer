@@ -114,6 +114,7 @@ struct GlobalRenderData
 	uint32_t sunLightCount = 0;
 	uint32_t pointLightCout = 0;
 	uint32_t spotLightCount = 0;
+	uint32_t maxRecoursionDepth = 0;
 };
 
 struct CameraData
