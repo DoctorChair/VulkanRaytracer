@@ -11,8 +11,6 @@ void Raytracer::init(SDL_Window* window)
 	windowWidth = w;
 	windowHeight = h;
 
-	_concurrencyCount = 3;
-
 	VkPhysicalDeviceVulkan13Features features11 = {};
 	features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
 
@@ -54,6 +52,8 @@ void Raytracer::init(SDL_Window* window)
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME},
 		&features2, _concurrencyCount);
+
+	uint32_t s = _vulkan.getSwapchainSize();
 
 	VGM::loadVulkanExtensions(_vulkan._instance, _vulkan._device);
 
@@ -275,6 +275,18 @@ uint32_t Raytracer::loadTexture(std::vector<unsigned char> pixels, uint32_t widt
 
 	_textures.back().cmdUploadTextureData(_transferCommandBuffer.get(), 1, 0, pixelTransferBuffer);
 
+	VkImageSubresourceRange subresource = {};
+	subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	subresource.baseArrayLayer = 0;
+	subresource.baseMipLevel = 0;
+	subresource.layerCount = 1;
+	subresource.levelCount = _textures.back().mipMapLevels();
+
+	_textures.back().cmdTransitionLayout(_transferCommandBuffer.get(), subresource, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 
+		VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+
 	_transferCommandBuffer.end();
 	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT };
 	_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
@@ -354,7 +366,7 @@ void Raytracer::drawMeshInstance(MeshInstance meshInstance, glm::mat4 transform)
 
 	instace.accelerationStructureReference = _accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex].getAddress(_vulkan._device);
 	instace.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-	instace.instanceCustomIndex = 0;
+	instace.instanceCustomIndex = command.firstInstance;
 	instace.mask = 0xFF;
 	instace.instanceShaderBindingTableRecordOffset = 0;
 	
@@ -419,9 +431,9 @@ void Raytracer::destroy()
 
 void Raytracer::initPresentFramebuffers()
 {
-	_presentFramebuffers.resize(_concurrencyCount);
+	_presentFramebuffers.resize(_vulkan.getSwapchainSize());
 	VkClearColorValue clearColor = { 1.0f, 0.0f, 0.0f, 0.0f };
-	for(unsigned int i = 0; i<_concurrencyCount; i++)
+	for(unsigned int i = 0; i< _presentFramebuffers.size(); i++)
 	{
 		_presentFramebuffers[i].bindColorTextureTarget(_vulkan._swapchainImageViews[i], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, clearColor);
 	}
@@ -667,7 +679,9 @@ void Raytracer::executeDefferedPass()
 	DefferedBuffer* currentDefferedBuffer = &_defferdBufferChain[_currentFrameIndex];
 	VkFence defferedRenderFence = _frameSynchroStructs[_currentFrameIndex]._defferedRenderFence;
 	VkFence raytraceRenderFence = _frameSynchroStructs[_currentFrameIndex]._raytraceFence;
+	
 	VkSemaphore presentSemaphore = _frameSynchroStructs[_currentFrameIndex]._presentSemaphore;
+
 	VGM::Buffer* currentDrawDataInstanceBuffer = &_drawDataIsntanceBuffers[_currentFrameIndex];
 	VGM::Buffer* currentDrawIndirectBuffer = &_drawIndirectCommandBuffer[_currentFrameIndex];
 	VGM::DescriptorSetAllocator* currentDefferedDescriptorSetAllocator = &_defferedDescriptorSetAllocator;
@@ -676,9 +690,10 @@ void Raytracer::executeDefferedPass()
 
 	VkRect2D renderArea = { 0, 0, windowWidth, windowHeight };
 	
-	VkFence fences[] = { defferedRenderFence, raytraceRenderFence };
+	VkFence fences[] = { defferedRenderFence, raytraceRenderFence};
 
-	defferedCmd->begin(fences, std::size(fences), _vulkan._device);
+	VK_CHECK(defferedCmd->begin(fences, std::size(fences), _vulkan._device));
+
 
 	_drawIndirectCommandBuffer[_currentFrameIndex].uploadData(_drawCommandTransferCache.data(),
 		_drawCommandTransferCache.size() * sizeof(VkDrawIndexedIndirectCommand),
@@ -686,8 +701,6 @@ void Raytracer::executeDefferedPass()
 	_drawDataIsntanceBuffers[_currentFrameIndex].uploadData(_drawDataTransferCache.data(),
 		_drawDataTransferCache.size() * sizeof(DrawData),
 		_vulkan._generalPurposeAllocator);
-
-	
 
 	_sunLightBuffers[_currentFrameIndex].uploadData(_sunLightTransferCache.data(),
 		_sunLightTransferCache.size() * sizeof(SunLight), _vulkan._generalPurposeAllocator);
@@ -853,7 +866,7 @@ void Raytracer::executeDefferedPass()
 	defferedCmd->end();
 
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	VkResult result = defferedCmd->submit(nullptr, 0, &presentSemaphore, 1, waitStages, defferedRenderFence, _vulkan._graphicsQeueu);
+	VK_CHECK(defferedCmd->submit(nullptr, 0, &presentSemaphore, 1, waitStages, defferedRenderFence, _vulkan._graphicsQeueu));
 
 	_sunLightTransferCache.clear();
 	_pointLightTransferCache.clear();
@@ -887,7 +900,7 @@ void Raytracer::executeRaytracePass()
 		_textureDescriptorSets[_currentFrameIndex]
 	};
 
-	raytraceCmd->begin(nullptr, 0, _vulkan._device);
+	VK_CHECK(raytraceCmd->begin(nullptr, 0, _vulkan._device));
 
 	void* ptr = currentInstanceBuffer->map(_vulkan._generalPurposeAllocator);
 	currentInstanceBuffer->memcopy(ptr, _accelerationStructure._instanceTransferCache.data(), 
@@ -902,7 +915,7 @@ void Raytracer::executeRaytracePass()
 	currentTopLevelAccelStructure->cmdUpdateTLAS(_accelerationStructure._instanceTransferCache.size(),
 		firstAddress, _vulkan._physicalDevice, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
 	
-	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
 		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
 
 	updateRaytraceDescripotrSets();
@@ -937,7 +950,7 @@ void Raytracer::executeRaytracePass()
 
 	raytraceCmd->end();
 
-	VkResult result = raytraceCmd->submit(nullptr, 0, nullptr, 0, nullptr, raytraceFence, _vulkan._computeQueue);
+	VK_CHECK(raytraceCmd->submit(nullptr, 0, nullptr, 0, nullptr, raytraceFence, _vulkan._computeQueue));
 
 	_accelerationStructure._instanceTransferCache.clear();
 }
@@ -961,7 +974,7 @@ void Raytracer::executeCompositPass()
 
 	VkRect2D renderArea = { 0, 0, windowWidth, windowHeight };
 
-	compositingCmd->begin(&currentFence, 1, _vulkan._device);
+	VK_CHECK(compositingCmd->begin(&currentFence, 1, _vulkan._device));
 
 	updateCompositingDescriptorSets();
 
@@ -985,7 +998,8 @@ void Raytracer::executeCompositPass()
 
 	compositingCmd->end();
 	VkPipelineStageFlags waitFlags = { VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR };
-	VkResult result = compositingCmd->submit(&currentCompositSemaphore, 1, nullptr, 0, &waitFlags, currentFence, _vulkan._graphicsQeueu);
+	VK_CHECK(compositingCmd->submit(&currentCompositSemaphore, 1, nullptr, 0, &waitFlags, currentFence, _vulkan._graphicsQeueu));
+
 }
 
 void Raytracer::initgBuffers()
@@ -1081,14 +1095,14 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_globalLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_gBufferLayout1);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_gBufferLayout2);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1107,7 +1121,7 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_lightLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, _maxTextureCount)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, _maxTextureCount)
 		.createDescriptorSetLayout(_vulkan._device, &_textureLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1117,10 +1131,10 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout1);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout2);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1279,7 +1293,8 @@ void Raytracer::initRaytraceShader()
 		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRGEN.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR},
 		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
 		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceShadowRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
-		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRCHIT.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR} };
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRCHIT.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}
+	};
 	
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1393,12 +1408,10 @@ void Raytracer::initSyncStructures()
 		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._raytraceFence);
 		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._compositingFence);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._offsceenRenderSemaphore);
-		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._availabilitySemaphore);
-		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._presentSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._defferedRenderSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._compositingSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._raytraceSemaphore);
-
+		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._presentSemaphore);
 		vkCreateEvent(_vulkan._device, &eventCreateInfo, nullptr, &_frameSynchroStructs[i]._defferedFinishedEvent);
 		vkCreateEvent(_vulkan._device, &eventCreateInfo, nullptr, &_frameSynchroStructs[i]._raytraceFinishedEvent);
 	}

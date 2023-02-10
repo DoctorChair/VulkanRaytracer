@@ -96,92 +96,67 @@ layout(std140, set = 3, binding = 2) readonly buffer SpotBuffer{
 	SpotLight spotLights[];
 } spotLightBuffer; 
 
-layout(set = 4, binding = 0) uniform sampler albedoSampler;
-layout(set = 4, binding = 1) uniform sampler metallicSampler;
-layout(set = 4, binding = 2) uniform sampler normalSampler;
-layout(set = 4, binding = 3) uniform sampler roughnessSampler;
-
 layout(std430, set = 5, binding = 0) readonly buffer DrawInstanceBuffer{
 	drawInstanceData instanceData[];
 } drawData;
 
-layout(set = 6, binding = 0) uniform texture2D textures[1024]; 
-
 struct hitPayload
 {
-  vec3 hitValue;
-  int depth;
+  bool shadowed;
+  vec3 barycentrics;
+  uint primitiveID;
+  uint instanceID;
 };
 
 layout(location = 1) rayPayloadInEXT hitPayload incomigPayload;
-
+layout(location = 0) rayPayloadEXT float shadowed;
 
 hitAttributeEXT vec2 hitAttribute;
 
 void main()
 {
-	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth)
-	{
-		const vec3 barycentrics = vec3(1.0 - hitAttribute.x - hitAttribute.y, hitAttribute.x, hitAttribute.y);
-
-		ivec3 indexTripplet = indices.i[gl_PrimitiveID];
-
-		Vertex v0 = vertices.v[indexTripplet.x];
-		Vertex v1 = vertices.v[indexTripplet.y];
-		Vertex v2 = vertices.v[indexTripplet.z];
-
-  		uint albedoIndex = drawData.instanceData[gl_InstanceCustomIndexEXT].material.albedoIndex;
-		uint normalIndex = drawData.instanceData[gl_InstanceCustomIndexEXT].material.normalIndex;
-		uint metallicIndex = drawData.instanceData[gl_InstanceCustomIndexEXT].material.metallicIndex;
-		uint roughnessIndex = drawData.instanceData[gl_InstanceCustomIndexEXT].material.roughnessIndex;
-
-		vec3 position = v0.position * barycentrics.x + v1.position * barycentrics.y + v2.position * barycentrics.z;
-		vec3 worldPosition = (gl_ObjectToWorldEXT  * vec4(position, 1.0)).xyz;
-
-		vec3 meshNormal = v0.normal * barycentrics.x + v1.normal * barycentrics.y + v2.normal * barycentrics.z;
-		vec3 worldMeshNormal = normalize(vec3(meshNormal * gl_ObjectToWorldEXT));
-
-		vec3 tangent = v0.tangent * barycentrics.x + v1.tangent * barycentrics.y + v2.tangent * barycentrics.z;
-		vec3 worldTangent = normalize(vec3(tangent * gl_ObjectToWorldEXT));
-
-		vec3 worldBitangent = normalize(cross(worldTangent, worldMeshNormal));
-
-		vec2 texCoord = v0.texCoord0 * barycentrics.x + v1.texCoord0 * barycentrics.y + v2.texCoord0 * barycentrics.z;
-
-		mat3 tbnMatrix = {worldTangent, worldBitangent, worldMeshNormal};
-
-		vec4 abledo = texture(sampler2D(textures[albedoIndex], albedoSampler), texCoord);
-		vec4 normal = texture(sampler2D(textures[normalIndex], metallicSampler), texCoord);
-		vec4 metallic = texture(sampler2D(textures[metallicIndex], normalSampler), texCoord);
-		vec4 roughness = texture(sampler2D(textures[roughnessIndex], roughnessSampler), texCoord);
-
-		normal.xyz = normal.xyz * tbnMatrix;
-
-		uint  rayFlags = gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-
-		vec3 incommingDirection = normalize(gl_WorldRayDirectionEXT);
-    	vec3 outgoingdirection = reflect(incommingDirection, normal.xyz);
-
-		float tMin = 0.001;
-		float tMax = 10000.0;
-		
-		incomigPayload.depth++;
-
-		traceRayEXT(topLevelAS, // acceleration structure
-    		rayFlags,       // rayFlags
-    		0xFF,           // cullMask
-    		0,              // sbtRecordOffset
-    		0,              // sbtRecordStride
-    		0,              // missIndex
-    		vec3(0.0, 0.0, 0.0),     // ray origin
-    		tMin,           // ray min range
-    		vec3(0.0, 1.0, 0.0),  // ray direction
-    		tMax,           // ray max range
-    		1               // payload (location = 1)
-    		);
-
-		incomigPayload.depth--; 
-	} 
+	const vec3 barycentrics = vec3(1.0 - hitAttribute.x - hitAttribute.y, hitAttribute.x, hitAttribute.y);
 	
-	incomigPayload.hitValue = vec3(1.0, 0.0, 0.0);
+	incomigPayload.barycentrics = barycentrics;
+	incomigPayload.primitiveID = gl_PrimitiveID;
+	incomigPayload.instanceID = gl_InstanceCustomIndexEXT;
+	
+	ivec3 indexTripplet = indices.i[gl_PrimitiveID];
+	
+	Vertex v0 = vertices.v[indexTripplet.x];
+	Vertex v1 = vertices.v[indexTripplet.y];
+	Vertex v2 = vertices.v[indexTripplet.z];
+  	
+	vec3 position = v0.position * barycentrics.x + v1.position * barycentrics.y + v2.position * barycentrics.z;
+	vec3 worldPosition = (gl_ObjectToWorldEXT  * vec4(position, 1.0)).xyz;
+	
+	vec3 meshNormal = v0.normal * barycentrics.x + v1.normal * barycentrics.y + v2.normal * barycentrics.z;
+	vec3 worldMeshNormal = normalize(vec3(meshNormal * gl_ObjectToWorldEXT));
+	
+	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+	
+	vec3 lightDirection = pointLightBuffer.pointLights[0].position - worldPosition;
+    float range = length(lightDirection);
+    lightDirection = normalize(lightDirection);
+    worldMeshNormal = normalize(worldMeshNormal);
+    float cosTheta = dot(lightDirection, worldMeshNormal);
+	
+	float tMin = 0.01;
+
+    shadowed = 0.0;
+
+    traceRayEXT(topLevelAS, // acceleration structure
+    	shadowRayFlags,       // rayFlags
+    	0xFF,           // cullMask
+    	0,              // sbtRecordOffset
+    	0,              // sbtRecordStride
+    	1,              // missIndex
+    	worldPosition,     // ray origin
+    	tMin,           // ray min range
+    	worldMeshNormal,  // ray direction
+    	range,           // ray max range
+    	0               // payload (location = 0)
+    ); 
+
+	incomigPayload.shadowed = bool(int(shadowed));
 }

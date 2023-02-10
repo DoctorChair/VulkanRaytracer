@@ -23,6 +23,21 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <iostream>
+
+//we want to immediately abort when there is an error. In normal engines this would give an error message to the user, or perform a dump of state.
+using namespace std;
+#define VK_CHECK(x)                                                 \
+	do                                                              \
+	{                                                               \
+		VkResult err = x;                                           \
+		if (err)                                                    \
+		{                                                           \
+			std::cout <<"Detected Vulkan error: " << err << std::endl; \
+			abort();                                                \
+		}                                                           \
+	} while (0)
+
 struct GBuffer
 {
 	VGM::Framebuffer framebuffer;
@@ -93,6 +108,7 @@ struct MeshInstance
 	uint32_t meshIndex;
 	Material material;
 	uint32_t instanceID;
+	glm::mat4 transform = glm::mat4(1.0f);
 };
 
 struct DrawData
@@ -128,13 +144,11 @@ struct CameraData
 
 struct FrameSynchro
 {
-	VkSemaphore _availabilitySemaphore;
-	VkSemaphore _presentSemaphore;
 	VkSemaphore _offsceenRenderSemaphore;
 	VkSemaphore _defferedRenderSemaphore;
 	VkSemaphore _raytraceSemaphore;
 	VkSemaphore _compositingSemaphore;
-	
+	VkSemaphore _presentSemaphore;
 	VkFence _offsrceenRenderFence;
 	VkFence _defferedRenderFence;
 	VkFence _raytraceFence;
@@ -233,7 +247,7 @@ private:
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
 
-	uint32_t _concurrencyCount = 3;
+	uint32_t _concurrencyCount = 2;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -291,6 +305,7 @@ private:
 	VGM::CommandBuffer _transferCommandBuffer;
 
 	std::vector<FrameSynchro> _frameSynchroStructs;
+	
 
 	std::vector<VGM::Buffer> _cameraBuffers;
 	std::vector<VGM::Buffer> _globalRenderDataBuffers;

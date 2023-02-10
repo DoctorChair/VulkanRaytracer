@@ -1,0 +1,120 @@
+
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+struct SunLight
+{
+	vec3 direction;
+	vec4 color;
+};
+
+struct PointLight
+{
+	vec3 position;
+	vec4 color;
+	float strength;
+};
+
+struct SpotLight
+{
+	vec3 position;
+	vec3 direction;
+	float openingAngle;
+	vec4 color;
+	float strength;
+};
+
+layout(set = 0, binding = 0) uniform  CameraBuffer{
+	mat4 viewMatrix;
+	mat4 inverseViewMatrix;
+  mat4 projectionMatrix;
+  mat4 inverseProjectionMatrix;
+	vec3 cameraPosition;
+} cameraData;
+
+layout(set = 0, binding = 1) uniform  RenderBuffer{
+	float fog;
+	uint sunLightCount;
+	uint pointLightCount;
+	uint spotLightCount;
+  uint maxRecoursionDepth;
+} globalDrawData;
+
+
+layout(set = 1, binding = 0) uniform sampler2D primaryRayColorTexture;
+layout(set = 1, binding = 1) uniform sampler2D primaryRayNormalTexture;
+layout(set = 1, binding = 2) uniform sampler2D primaryRayDepthTexture;
+
+layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(set = 2, binding = 1, rgba32f) uniform image2D image;
+
+layout(std140, set = 3, binding = 0) readonly buffer SunBuffer{
+
+	SunLight sunLights[];
+} sunLightBuffer;
+
+layout(std140, set = 3, binding = 1) readonly buffer PointBuffer{
+
+	PointLight pointLights[];
+} pointLightBuffer;
+
+layout(std140, set = 3, binding = 2) readonly buffer SpotBuffer{
+
+	SpotLight spotLights[];
+} spotLightBuffer; 
+
+struct hitPayload
+{
+  vec3 hitValue;
+  int depth;
+};
+
+layout(location = 0) rayPayloadEXT float shadowed;
+layout(location = 1) rayPayloadEXT hitPayload payload;
+
+
+
+void main()
+{
+    const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
+    const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
+    
+    vec4 color = texture(primaryRayColorTexture, inUV);
+    vec4 normal = texture(primaryRayNormalTexture, inUV);
+    float depth = texture(primaryRayDepthTexture, inUV).x;
+
+    vec4 clipSpacePosition = vec4(inUV * 2.0 - 1.0, depth, 1.0);
+    vec4 viewSpacePosition = cameraData.inverseProjectionMatrix * clipSpacePosition;
+    viewSpacePosition = viewSpacePosition / viewSpacePosition.w;
+	vec4 samplePosition = cameraData.inverseViewMatrix * viewSpacePosition;
+
+    vec3 incommingDirection = normalize(samplePosition.xyz - cameraData.cameraPosition);
+    vec3 outgoingdirection = reflect(incommingDirection, normal.xyz);
+
+    uint  rayFlags = gl_RayFlagsOpaqueEXT;
+    uint  shadowRayFlags =  gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+    float tMin     = 0.001;
+    float tMax     = 10000.0;
+     
+    payload.depth = 0;
+    
+    vec4 outColor = vec4(0.0, 0.0, 0.0, 1.0);
+
+    traceRayEXT(topLevelAS, // acceleration structure
+        rayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        0,              // missIndex
+        samplePosition.xyz,     // ray origin
+        tMin,           // ray min range
+        outgoingdirection.xyz,  // ray direction
+        tMax,           // ray max range
+        1               // payload (location = 1)
+        ); 
+    
+    outColor.xyz = payload.hitValue; 
+
+    imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
+}

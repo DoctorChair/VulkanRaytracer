@@ -46,7 +46,7 @@ ShaderBindingTable::ShaderBindingTable(VkPipeline raytracePipeline,
 
 	_sbtBuffer = VGM::Buffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
 		| VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR, sbtBufferSize, allocator, device);
-	
+
 	VkDeviceAddress sbtAddress = _sbtBuffer.getDeviceAddress(device);
 
 	_rgenRegion.deviceAddress = sbtAddress;
