@@ -1,7 +1,9 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-#extension GL_GOOGLE_include_directive : enable
+//#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference_uvec2 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_buffer_reference2: require
 
 #include "BRDF.glsl"
@@ -46,13 +48,12 @@ struct drawInstanceData
 struct Vertex
 {
 	vec3 position;
+	vec3 normal;
+	vec3 tangent;
 	vec2 texCoord0;
 	vec2 texCoord1;
 	vec2 texCoord2;
 	vec2 texCoord3;
-	vec3 normal;
-	vec3 tangent;
-	vec3 bitangent;
 };
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
@@ -77,14 +78,19 @@ layout(set = 1, binding = 2) uniform sampler2D primaryRayDepthTexture;
 
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 
- layout(buffer_reference, set = 2, binding = 2) buffer vertexBuffer{
-	Vertex v[];
-	} vertices;
-	
-layout(buffer_reference, set = 2, binding = 3) buffer indexBuffer{
-	uint i[];
-	} indices;
- 
+layout(buffer_reference, scalar) buffer Vertices {Vertex v[]; }; // Positions of an object
+layout(buffer_reference, scalar) buffer Indices {uint i[]; }; // Triangle indices
+
+layout(std430, set = 2, binding = 2) buffer VertexBuffer
+{
+	uvec2 address;
+}vertexAddress;
+
+layout(std430 ,set = 2, binding = 3) buffer IndexBuffer
+{
+	uvec2 address;
+}indexAddress;
+
 layout(std140, set = 3, binding = 0) readonly buffer SunBuffer{
 
 	SunLight sunLights[];
@@ -128,14 +134,25 @@ void main()
 {
 	const vec3 barycentrics = vec3(1.0 - hitAttribute.x - hitAttribute.y, hitAttribute.x, hitAttribute.y);
 	
-	uint index0 = indices.i[gl_PrimitiveID * 3];
-	uint index1 = indices.i[(gl_PrimitiveID * 3) + 1];
-	uint index2 = indices.i[(gl_PrimitiveID * 3) + 2];
-	
-	Vertex v0 = vertices.v[index0];
-	Vertex v1 = vertices.v[index1];
-	Vertex v2 = vertices.v[index2];
+	uint index0;
+	uint index1;
+	uint index2;
+
+	Vertex v0;
+	Vertex v1;
+	Vertex v2;
   	
+	Vertices vertices = Vertices(vertexAddress.address);
+	Indices indices = Indices(indexAddress.address);
+
+	index0 = indices.i[gl_PrimitiveID * 3];
+	index1 = indices.i[gl_PrimitiveID * 3 + 1];
+	index2 = indices.i[gl_PrimitiveID * 3 + 2];
+
+	v0 = vertices.v[index0];
+	v1 = vertices.v[index1];
+	v2 = vertices.v[index2];
+ 
 	drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT];
 
 	mat4 modelMatrix = instanceData.modelMatrix;
@@ -175,6 +192,8 @@ void main()
 
 	vec3 radiance = vec3(0.0, 0.0, 0.0);
 
+	incomigPayload.color = vec3(0.0, 0.0, 0.0);
+
     for(uint i = 0; i < globalDrawData.pointLightCount; i++)
     {
 		vec3 lightDirection = pointLightBuffer.pointLights[i].position - worldPosition;
@@ -210,7 +229,7 @@ void main()
 
 				vec3 brdf = BRDF(gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 				float irradiance = max(dot(normal, lightDirection), 0.0);
-				radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;
+				radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;				
 			}
 				
    		}

@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
 
 	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
 
-//	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
+	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
 
 	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
 

@@ -43,18 +43,6 @@ struct drawInstanceData
 	uint ID;
 };
 
-struct Vertex
-{
-	vec3 position;
-	vec2 texCoord0;
-	vec2 texCoord1;
-	vec2 texCoord2;
-	vec2 texCoord3;
-	vec3 normal;
-	vec3 tangent;
-	vec3 bitangent;
-};
-
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 viewMatrix;
@@ -143,11 +131,38 @@ void main()
     float tMax     = 10000.0;
 
     vec4 outColor = color;
- 
+    
+     for(uint i = 0; i < globalDrawData.pointLightCount; i++)
+    {
+      vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
+      float range = length(lightDirection);
+      lightDirection = normalize(lightDirection);
+      normal.xyz = normalize(normal.xyz);
+      float cosTheta = dot(lightDirection, normal.xyz);
+
+      shadowed = 0.3;
+      if(cosTheta > 0)
+      {
+        traceRayEXT(topLevelAS, // acceleration structure
+        shadowRayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        1,              // missIndex
+        samplePosition.xyz,     // ray origin
+        tMin,           // ray min range
+        lightDirection.xyz,  // ray direction
+        range,           // ray max range
+        0               // payload (location = 0)
+        );
+      
+        outColor.xyz = outColor.xyz * shadowed;
+      }
+    }  
+
     payload.miss = false;
     payload.position = samplePosition.xyz;
     payload.normal = normal.xyz;
-    payload.color = color.xyz;
 
     vec3 priorPosition = cameraData.cameraPosition;
 
@@ -175,34 +190,8 @@ void main()
       outColor.xyz = (payload.color * (1.0/(distance*distance))) + outColor.xyz;
     }
 
-    for(uint i = 0; i < globalDrawData.pointLightCount; i++)
-    {
-      vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
-      float range = length(lightDirection);
-      lightDirection = normalize(lightDirection);
-      normal.xyz = normalize(normal.xyz);
-      float cosTheta = dot(lightDirection, normal.xyz);
-
-      shadowed = 0.3;
-      if(cosTheta > 0)
-      {
-        traceRayEXT(topLevelAS, // acceleration structure
-        shadowRayFlags,       // rayFlags
-        0xFF,           // cullMask
-        0,              // sbtRecordOffset
-        0,              // sbtRecordStride
-        1,              // missIndex
-        samplePosition.xyz,     // ray origin
-        tMin,           // ray min range
-        lightDirection.xyz,  // ray direction
-        range,           // ray max range
-        0               // payload (location = 0)
-        );
-      
-        outColor.xyz = outColor.xyz * shadowed;
-      }
-    }  
-      
-
+   
+    
+   
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

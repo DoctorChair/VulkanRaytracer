@@ -1,12 +1,12 @@
 #version 460
 
 layout (location = 0) in vec3 vertexPos;
-layout (location = 1) in vec2 TexCoords0;
-layout (location = 2) in vec2 TexCoords1;
-layout (location = 3) in vec2 TexCoords2;
-layout (location = 4) in vec2 TexCoords3;
-layout (location = 5) in vec3 normal;
-layout (location = 6) in vec3 tangent;
+layout (location = 1) in vec3 normal;
+layout (location = 2) in vec3 tangent;
+layout (location = 3) in vec2 TexCoords0;
+layout (location = 4) in vec2 TexCoords1;
+layout (location = 5) in vec2 TexCoords2;
+layout (location = 6) in vec2 TexCoords3;
 
 //output variable to the fragment shader
 layout (location = 0) out vec4 outPosition;

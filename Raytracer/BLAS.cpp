@@ -61,7 +61,7 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 
 	build.dstAccelerationStructure = _blas;
 
-	_scratchBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
+	_scratchBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		buildSize.buildScratchSize + scratchOffsetAlignment, allocator, device);
 
 	VkDeviceAddress scratchAddress = _scratchBuffer.getDeviceAddress(device);
