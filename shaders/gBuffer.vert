@@ -7,7 +7,6 @@ layout (location = 3) in vec2 TexCoords2;
 layout (location = 4) in vec2 TexCoords3;
 layout (location = 5) in vec3 normal;
 layout (location = 6) in vec3 tangent;
-layout (location = 7) in vec3 bitangent;
 
 //output variable to the fragment shader
 layout (location = 0) out vec4 outPosition;

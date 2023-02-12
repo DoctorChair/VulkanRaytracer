@@ -122,44 +122,48 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 	indexTransferBuffer.cmdMemoryBarrier(_transferCommandBuffer.get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0);
 
-		_meshBuffer.vertices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
-		vertexTransferBuffer.get(), vertices.size() * sizeof(Vertex), 0); 
-		_meshBuffer.indices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
-		indexTransferBuffer.get(), indices.size() * sizeof(uint32_t), 0);
-
-	_transferCommandBuffer.end();
-	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_NONE };
-	VkResult r = _transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._transferQeueu);
-	
-	if (r != VK_SUCCESS)
-		throw std::runtime_error("Queue corrupted!\n");
-
-	r = vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
-	r = vkResetFences(_vulkan._device, 1, &transferFence);
-
-	if (r != VK_SUCCESS)
-		throw std::runtime_error("Queue corrupted!\n");
+	_meshBuffer.vertices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
+	vertexTransferBuffer.get(), vertices.size() * sizeof(Vertex), 0); 
+	_meshBuffer.indices.cmdAppendCopyBuffer(_transferCommandBuffer.get(),
+	indexTransferBuffer.get(), indices.size() * sizeof(uint32_t), 0);
 
 	VkDeviceAddress vertexAddress = _meshBuffer.vertices.getDeviceAddress(_vulkan._device);
 	VkDeviceAddress indexAddress = _meshBuffer.indices.getDeviceAddress(_vulkan._device);
 
-	_raytraceBuildCommandBuffer.begin(nullptr, 0, _vulkan._device);
+	_meshBuffer.vertices.cmdMemoryBarrier(_transferCommandBuffer.get(), VK_ACCESS_TRANSFER_WRITE_BIT, 
+		VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
+	_meshBuffer.indices.cmdMemoryBarrier(_transferCommandBuffer.get(), VK_ACCESS_TRANSFER_WRITE_BIT, 
+		VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
 
-	_accelerationStructure.bottomLevelAccelStructures.emplace_back(BLAS(vertexAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, sizeof(Vertex),
-		VK_INDEX_TYPE_UINT32, mesh.vertexCount - 1, mesh.vertexOffset, mesh.indicesCount, mesh.indexOffset,
-		_vulkan._device, _vulkan._meshAllocator, _raytraceBuildCommandBuffer.get()));
+	VkPhysicalDeviceAccelerationStructurePropertiesKHR accelProperties = {};
+	accelProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+	VkPhysicalDeviceProperties2 features = {};
+	features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+	features.pNext = &accelProperties;
 
-	_raytraceBuildCommandBuffer.end();
-	r = _raytraceBuildCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._computeQueue);
-	
-	if (r != VK_SUCCESS)
-		throw std::runtime_error("Queue corrupted!\n");
-	
-	r = vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout);
-	r = vkResetFences(_vulkan._device, 1, &transferFence);
+	vkGetPhysicalDeviceProperties2(_vulkan._physicalDevice, &features);
 
-	if (r != VK_SUCCESS)
-		throw std::runtime_error("Queue corrupted!\n");
+	_accelerationStructure.bottomLevelAccelStructures.emplace_back(BLAS(vertexAddress, indexAddress, VK_FORMAT_R32G32B32_SFLOAT, sizeof(Vertex), 
+		accelProperties.minAccelerationStructureScratchOffsetAlignment, VK_INDEX_TYPE_UINT32, mesh.vertexCount - 1, mesh.vertexOffset, mesh.indicesCount, mesh.indexOffset,
+		_vulkan._device, _vulkan._meshAllocator, _transferCommandBuffer.get()));
+
+	_meshBuffer.vertices.cmdMemoryBarrier(_transferCommandBuffer.get(), 
+		VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
+	_meshBuffer.indices.cmdMemoryBarrier(_transferCommandBuffer.get(), 
+		VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
+
+	_transferCommandBuffer.end();
+
+	VkPipelineStageFlags stageFlags = { VK_PIPELINE_STAGE_NONE };
+	VK_CHECK(_transferCommandBuffer.submit(nullptr, 0, nullptr, 0, &stageFlags, transferFence, _vulkan._computeQueue));
+	VK_CHECK(vkWaitForFences(_vulkan._device, 1, &transferFence, VK_TRUE, _timeout));
+	VK_CHECK(vkResetFences(_vulkan._device, 1, &transferFence));
 
 	vkDestroyFence(_vulkan._device, transferFence, nullptr);
 
@@ -172,6 +176,7 @@ Mesh Raytracer::loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& i
 
 	vertexTransferBuffer.destroy(_vulkan._generalPurposeAllocator);
 	indexTransferBuffer.destroy(_vulkan._generalPurposeAllocator);
+
 
 	return mesh;
 }
@@ -441,30 +446,30 @@ void Raytracer::initPresentFramebuffers()
 
 void Raytracer::initMeshBuffer()
 {
-	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+	_meshBuffer.vertices = VGM::Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 		VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, _maxTriangleCount * 3 * sizeof(Vertex), _vulkan._meshAllocator, _vulkan._device);
-	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+	
+	_meshBuffer.indices = VGM::Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT
 		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 		VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, _maxTriangleCount * sizeof(uint32_t), _vulkan._meshAllocator, _vulkan._device);
+	
+	VkDeviceSize alignment = _vulkan._phyiscalDeviceProperties.limits.minStorageBufferOffsetAlignment;
 
-	VkDescriptorBufferInfo vertexInfo = {};
-	vertexInfo.buffer = _meshBuffer.vertices.get();
-	vertexInfo.offset = 0;
-	vertexInfo.range = _meshBuffer.vertices.capacity();
+	VkDeviceSize alignedSize = sizeof(VkDeviceAddress);
+	VkDeviceSize r = alignedSize % alignment;
 
-	VkDescriptorBufferInfo indexInfo = {};
-	indexInfo.buffer = _meshBuffer.indices.get();
-	indexInfo.offset = 0;
-	indexInfo.range = _meshBuffer.indices.capacity();
+	alignedSize = (r == 0) ? alignedSize : alignedSize + (alignment - r);
 
-	for(unsigned int i = 0; i<_raytracer2DescriptorSets.size(); i++)
-	{
-		VGM::DescriptorSetUpdater::begin(&_raytracer2DescriptorSets[i])
-			.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vertexInfo, 1, 0, 2)
-			.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, indexInfo, 1, 0, 3)
-			.updateDescriptorSet(_vulkan._device);
-	}
+	_meshBuffer.addressBuffer = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		2 * alignedSize, _vulkan._meshAllocator, _vulkan._device);
+
+	VkDeviceAddress addresses[2] = {_meshBuffer.vertices.getDeviceAddress(_vulkan._device), _meshBuffer.indices.getDeviceAddress(_vulkan._device)};
+
+	void* ptr = _meshBuffer.addressBuffer.map(_vulkan._meshAllocator);
+	_meshBuffer.addressBuffer.memcopy(ptr, &addresses[0], sizeof(VkDeviceAddress));
+	_meshBuffer.addressBuffer.memcopy(ptr, &addresses[0] + alignedSize, sizeof(VkDeviceAddress));
+	_meshBuffer.addressBuffer.unmap(_vulkan._meshAllocator);
 }
 
 void Raytracer::initTextureArrays()
@@ -649,6 +654,16 @@ void Raytracer::updateRaytraceDescripotrSets()
 	accelWrite.pNext = nullptr;
 	accelWrite.pAccelerationStructures = _accelerationStructure.topLevelAccelStructures[_currentFrameIndex].get();
 	accelWrite.accelerationStructureCount = 1;
+	
+	VkDescriptorBufferInfo vertexInfo = {};
+	vertexInfo.buffer = _meshBuffer.addressBuffer.get();
+	vertexInfo.offset = 0;
+	vertexInfo.range = sizeof(VkDeviceAddress);
+
+	VkDescriptorBufferInfo indexInfo = {};
+	indexInfo.buffer = _meshBuffer.addressBuffer.get();
+	indexInfo.offset = 2*sizeof(VkDeviceAddress);
+	indexInfo.range = sizeof(VkDeviceAddress);
 
 	VkDescriptorSet sets[] = { _raytracer1DescriptorSets[_currentFrameIndex], _raytracer2DescriptorSets[_currentFrameIndex] };
 	VGM::DescriptorSetUpdater::begin(sets)
@@ -657,6 +672,8 @@ void Raytracer::updateRaytraceDescripotrSets()
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depthInfo, nullptr, 1, 0, 2)
 		.bindAccelerationStructure(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, &accelWrite, 1, 1, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &outColorInfo, nullptr, 1, 1, 1)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vertexInfo, 1, 1, 2)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, indexInfo, 1, 1, 3)
 		.updateDescriptorSet(_vulkan._device);
 }
 
@@ -901,13 +918,13 @@ void Raytracer::executeRaytracePass()
 	};
 
 	VK_CHECK(raytraceCmd->begin(nullptr, 0, _vulkan._device));
-
+	
 	void* ptr = currentInstanceBuffer->map(_vulkan._generalPurposeAllocator);
 	currentInstanceBuffer->memcopy(ptr, _accelerationStructure._instanceTransferCache.data(), 
 		sizeof(VkAccelerationStructureInstanceKHR) * _accelerationStructure._instanceTransferCache.size());
 	currentInstanceBuffer->unmap(_vulkan._generalPurposeAllocator);
 	
-	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
 
 	VkDeviceAddress firstAddress = currentInstanceBuffer->getDeviceAddress(_vulkan._device);
@@ -915,8 +932,6 @@ void Raytracer::executeRaytracePass()
 	currentTopLevelAccelStructure->cmdUpdateTLAS(_accelerationStructure._instanceTransferCache.size(),
 		firstAddress, _vulkan._physicalDevice, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
 	
-	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
-		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
 
 	updateRaytraceDescripotrSets();
 
@@ -1090,38 +1105,49 @@ void Raytracer::initDescriptorSetAllocator()
 void Raytracer::initDescriptorSetLayouts()
 {
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_globalLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_gBufferLayout1);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_gBufferLayout2);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
-		.addBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1)
+		.addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1)
+		.addBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_defferedLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_lightLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR, _maxTextureCount)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, _maxTextureCount)
 		.createDescriptorSetLayout(_vulkan._device, &_textureLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1133,12 +1159,12 @@ void Raytracer::initDescriptorSetLayouts()
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
-		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout2);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_ALL_GRAPHICS, 1)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_compositingLayout);
 }
 
@@ -1237,7 +1263,6 @@ void Raytracer::initGBufferShader()
 	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32_SFLOAT, 9 * sizeof(float)); //texCoord
 	configurator.addVertexAttribInputDescription(5, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //normal
 	configurator.addVertexAttribInputDescription(6, 0, VK_FORMAT_R32G32B32_SFLOAT, 14 * sizeof(float)); //tangent
-	configurator.addVertexAttribInputDescription(7, 0, VK_FORMAT_R32G32B32_SFLOAT, 17 * sizeof(float)); //bitangant
 	configurator.addVertexInputInputBindingDescription(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX);
 
 	uint32_t numSamplers = 10;

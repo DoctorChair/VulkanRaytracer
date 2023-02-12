@@ -8,7 +8,7 @@ class BLAS
 {
 public:
 	BLAS() = default;
-	BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat vertexFormat, 
+	BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat vertexFormat, uint32_t scratchOffsetAlignment,
 		VkDeviceSize vertexStride, VkIndexType indexType, uint32_t maxVertices, 
 		uint32_t VertexOffset, uint32_t IndicesCount, uint32_t IndicesOffeset, VkDevice device, VmaAllocator& allocator, VkCommandBuffer commandBuffer);
 	VkDeviceAddress getAddress(VkDevice device);

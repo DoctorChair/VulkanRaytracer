@@ -80,14 +80,6 @@ layout(set = 1, binding = 2) uniform sampler2D primaryRayDepthTexture;
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 2, binding = 1, rgba32f) uniform image2D image;
 
-layout(std430, set = 2, binding = 2) buffer vertexBuffer{
-	Vertex v[];
-	} vertices;
-	
-layout(std430, set = 2, binding = 3) buffer indexBuffer{
-	ivec3 i[];
-	} indices;
-
 layout(std140, set = 3, binding = 0) readonly buffer SunBuffer{
 
 	SunLight sunLights[];
@@ -118,10 +110,10 @@ layout(set = 6, binding = 0) uniform texture2D textures[1024];
 
 struct hitPayload
 {
-  bool shadowed;
-  vec3 barycentrics;
-  uint primitiveID;
-  uint instanceID;
+  bool miss;
+  vec3 color;
+  vec3 normal;
+  vec3 position;
 };
 
 layout(location = 0) rayPayloadEXT float shadowed;
@@ -150,72 +142,42 @@ void main()
     float tMin     = 0.001;
     float tMax     = 10000.0;
 
-    vec4 outColor = vec4(0.0, 1.0, 0.0, 1.0);
+    vec4 outColor = color;
+ 
+    payload.miss = false;
+    payload.position = samplePosition.xyz;
+    payload.normal = normal.xyz;
+    payload.color = color.xyz;
 
-    
-    vec3 worldPosition = samplePosition.xyz;
-    vec3 incommingDirection = normalize(samplePosition.xyz - cameraData.cameraPosition);
-    vec3 outgoingdirection = reflect(incommingDirection, normal.xyz);
+    vec3 priorPosition = cameraData.cameraPosition;
 
-    for(uint i = 0; i < globalDrawData.maxRecoursionDepth; i++)
+    for(uint i = 0; i < globalDrawData.maxRecoursionDepth && !payload.miss; i++)
     {
-    traceRayEXT(topLevelAS, // acceleration structure
+      vec3 incommingDirection = normalize(payload.position - priorPosition);
+      vec3 outgoingdirection = reflect(incommingDirection,  payload.normal);
+      priorPosition = payload.position;
+
+      traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
         0xFF,           // cullMask
         0,              // sbtRecordOffset
         0,              // sbtRecordStride
         0,              // missIndex
-        samplePosition.xyz,     // ray origin
+        priorPosition,     // ray origin
         tMin,           // ray min range
         outgoingdirection.xyz,  // ray direction
         tMax,           // ray max range
         1               // payload (location = 1)
         );
-      
-      if(payload.instanceID != 0)
-      {
-        vec3 barycentrics = payload.barycentrics;
-        ivec3 indexTripplet = indices.i[payload.primitiveID];
-  
-	      Vertex v0 = vertices.v[indexTripplet.x];
-	      Vertex v1 = vertices.v[indexTripplet.y];
-	      Vertex v2 = vertices.v[indexTripplet.z];
 
-        drawInstanceData instanceData = drawData.instanceData[payload.instanceID];
+      float distance = length(priorPosition - payload.position);
 
-        mat4 modelMatrix = instanceData.modelMatrix;
-        Material material = instanceData.material;
-
-	      vec3 position = v0.position * barycentrics.x + v1.position * barycentrics.y + v2.position * barycentrics.z;
-	      worldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-
-        vec3 meshNormal = v0.normal * barycentrics.x + v1.normal * barycentrics.y + v2.normal * barycentrics.z;
-        vec3 worldMeshNormal = normalize(vec3(modelMatrix * vec4(meshNormal, 0.0)));
-
-        vec3 meshTangnet = v0.tangent * barycentrics.x + v1.tangent * barycentrics.y + v2.tangent * barycentrics.z;
-        vec3 worldMeshTangnet = normalize(vec3(modelMatrix * vec4(meshTangnet, 0.0)));
-
-        vec2 texCoord = v0.texCoord0 * barycentrics.x + v0.texCoord0 * barycentrics.y + v2.texCoord0 * barycentrics.z;
-
-        vec3 worldMeshBitagnent = cross(worldMeshTangnet, worldMeshNormal);
-
-        mat3 tbnMatrix = {worldMeshTangnet, worldMeshBitagnent, worldMeshNormal};
-
-        vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], albedoSampler), texCoord);
-	      vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], normalSampler), texCoord);
-	      vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], metallicSampler), texCoord);
-    	  vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], roughnessSampler), texCoord);
-
-        normal.xyz = tbnMatrix * normal.xyz;
-
-        outColor.xyz = colorTexture.xyz;
-      }
+      outColor.xyz = (payload.color * (1.0/(distance*distance))) + outColor.xyz;
     }
 
     for(uint i = 0; i < globalDrawData.pointLightCount; i++)
     {
-      outColor = color;
-      vec3 lightDirection = pointLightBuffer.pointLights[0].position - samplePosition.xyz;
+      vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
       float range = length(lightDirection);
       lightDirection = normalize(lightDirection);
       normal.xyz = normalize(normal.xyz);
@@ -239,8 +201,8 @@ void main()
       
         outColor.xyz = outColor.xyz * shadowed;
       }
-    }
-    
+    }  
+      
 
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

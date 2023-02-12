@@ -25,7 +25,7 @@
 
 #include <iostream>
 
-//we want to immediately abort when there is an error. In normal engines this would give an error message to the user, or perform a dump of state.
+
 using namespace std;
 #define VK_CHECK(x)                                                 \
 	do                                                              \
@@ -74,6 +74,7 @@ struct MeshBuffer
 {
 	VGM::Buffer vertices;
 	VGM::Buffer indices;
+	VGM::Buffer addressBuffer;
 };
 
 struct AccelerationStructure
@@ -247,7 +248,7 @@ private:
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
 
-	uint32_t _concurrencyCount = 2;
+	uint32_t _concurrencyCount = 1;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -256,7 +257,7 @@ private:
 	uint32_t _maxSunLights = 10;
 	uint32_t _maxPointLighst = 10;
 	uint32_t _maxSpotLights = 10;
-	uint32_t _maxRecoursionDepth = 2;
+	uint32_t _maxRecoursionDepth = 1;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;

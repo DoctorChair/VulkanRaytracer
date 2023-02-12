@@ -130,10 +130,6 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 			vertex.tangent.x = mesh->mTangents[i].x;
 			vertex.tangent.y = mesh->mTangents[i].y;
 			vertex.tangent.z = mesh->mTangents[i].z;
-			
-			vertex.bitangent.x = mesh->mBitangents[i].x;
-			vertex.bitangent.y = mesh->mBitangents[i].y;
-			vertex.bitangent.z = mesh->mBitangents[i].z;
 		}
 
 		meshData.vertices[i] = vertex;

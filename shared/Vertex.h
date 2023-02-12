@@ -7,5 +7,5 @@ struct Vertex
 	glm::vec2 texCoord[4];
 	glm::vec3 normal;
 	glm::vec3 tangent;
-	glm::vec3 bitangent;
+	float padding;
 };

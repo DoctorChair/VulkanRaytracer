@@ -1,7 +1,7 @@
 #include "BLAS.h"
 
 
-BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat vertexFormat, 
+BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat vertexFormat, uint32_t scratchOffsetAlignment,
 	VkDeviceSize vertexStride, VkIndexType indexType, uint32_t maxVertices, 
 	uint32_t VertexOffset, uint32_t IndicesCount, uint32_t IndicesOffeset, VkDevice device, VmaAllocator& allocator, VkCommandBuffer commandBuffer)
 {
@@ -28,7 +28,7 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 	range.primitiveCount = IndicesCount / 3;
 	range.primitiveOffset = IndicesOffeset * sizeof(uint32_t);
 	range.transformOffset = 0;
-
+	
 	VkAccelerationStructureBuildGeometryInfoKHR build = {};
 	build.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	build.pNext = nullptr;
@@ -57,14 +57,20 @@ BLAS::BLAS(VkDeviceAddress vertexAddress, VkDeviceAddress indexAddress, VkFormat
 	accelInfo.buffer = _blasBuffer.get();
 	accelInfo.size = buildSize.accelerationStructureSize;
 
-	VkResult r = vkCreateAccelerationStructureKHR(device, &accelInfo, nullptr, &_blas);
+	vkCreateAccelerationStructureKHR(device, &accelInfo, nullptr, &_blas);
 
 	build.dstAccelerationStructure = _blas;
 
 	_scratchBuffer = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
-		buildSize.buildScratchSize, allocator, device);
+		buildSize.buildScratchSize + scratchOffsetAlignment, allocator, device);
 
-	build.scratchData.deviceAddress = _scratchBuffer.getDeviceAddress(device);
+	VkDeviceAddress scratchAddress = _scratchBuffer.getDeviceAddress(device);
+	if (scratchOffsetAlignment != 0)
+	{
+		VkDeviceAddress r = scratchAddress % scratchOffsetAlignment;
+		scratchAddress = (r == 0) ? scratchAddress : scratchAddress + (scratchOffsetAlignment - r);
+	}
+	build.scratchData.deviceAddress = scratchAddress;
 
 	VkAccelerationStructureBuildRangeInfoKHR * pRangeInfo = &range;
 

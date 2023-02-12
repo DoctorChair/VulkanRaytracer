@@ -3,18 +3,16 @@
 
 struct hitPayload
 {
-  bool shadowed;
-  vec3 barycentrics;
-  uint primitiveID;
-  uint instanceID;
+  bool miss;
+  vec3 color;
+  vec3 normal;
+  vec3 position;
 };
 
 layout(location = 1) rayPayloadInEXT hitPayload incomigPayload;
 
 void main()
 {
-  incomigPayload.shadowed = false;
-  incomigPayload.barycentrics = vec3(0.0, 0.0, 0.0);
-  incomigPayload.instanceID = 0;
-  incomigPayload.primitiveID = 0;
+  incomigPayload.color = incomigPayload.color;
+  incomigPayload.miss = true;
 }
