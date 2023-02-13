@@ -91,17 +91,17 @@ layout(std430 ,set = 2, binding = 3) buffer IndexBuffer
 	uvec2 address;
 }indexAddress;
 
-layout(std140, set = 3, binding = 0) readonly buffer SunBuffer{
+layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
 
 	SunLight sunLights[];
 } sunLightBuffer;
 
-layout(std140, set = 3, binding = 1) readonly buffer PointBuffer{
+layout(std430, set = 3, binding = 1) readonly buffer PointBuffer{
 
 	PointLight pointLights[];
 } pointLightBuffer;
 
-layout(std140, set = 3, binding = 2) readonly buffer SpotBuffer{
+layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
 
 	SpotLight spotLights[];
 } spotLightBuffer; 
@@ -168,9 +168,9 @@ void main()
     vec3 worldMeshTangnet = normalize(vec3(gl_WorldToObjectEXT * vec4(meshTangnet, 0.0)));
     
 	vec2 texCoord = v0.texCoord0 * barycentrics.x + v0.texCoord0 * barycentrics.y + v2.texCoord0 * barycentrics.z;
-    vec3 worldMeshBitagnent = cross(worldMeshTangnet, worldMeshNormal);
+    vec3 worldMeshBitagnent = cross(worldMeshNormal, worldMeshTangnet);
     
-	mat3 tbnMatrix = {worldMeshTangnet, worldMeshBitagnent, worldMeshNormal};
+	mat3 tbnMatrix = {worldMeshTangnet, -worldMeshBitagnent, worldMeshNormal};
     
 	vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], albedoSampler), texCoord);
 	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], normalSampler), texCoord);
@@ -218,16 +218,15 @@ void main()
 			);  
 
 
-			if(shadowed > shadowValue)
+			if(shadowed != shadowValue)
 			{
 				vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
-				float distance = length(lightDirection);
 
-				float attenuation = 1.0/(distance*distance);
+				float attenuation = 1.0/(range*range);
 
 				lightDirection = normalize(lightDirection);
 
-				vec3 brdf = BRDF(gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
+				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 				float irradiance = max(dot(normal, lightDirection), 0.0);
 				radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;				
 			}
@@ -235,8 +234,42 @@ void main()
    		}
 	}
 
+	float tMax = 1000.0;
     for(uint i = 0; i < globalDrawData.sunLightCount; i++)
-    { 
+    {
+		vec3 lightDirection = sunLightBuffer.sunLights[i].direction;
+		lightDirection = normalize(lightDirection);
+		float cosTheta = dot(lightDirection, normal);
+
+		shadowed = shadowValue;
+		if(cosTheta > 0)
+		{
+			traceRayEXT(topLevelAS, // acceleration structure
+				shadowRayFlags,       // rayFlags
+				0xFF,           // cullMask
+				0,              // sbtRecordOffset
+				0,              // sbtRecordStride
+				1,              // missIndex
+				worldPosition,     // ray origin
+				tMin,           // ray min range
+				lightDirection,  // ray direction
+				tMax,           // ray max range
+				0               // payload (location = 0)
+			);  
+
+
+			if(shadowed != shadowValue)
+			{
+				vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
+
+				lightDirection = normalize(lightDirection);
+
+				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
+				float irradiance = max(dot(normal, lightDirection), 0.0);
+				radiance =  radiance + irradiance * brdf * lightColor;				
+			}
+				
+   		} 
     }
 
     for(uint i = 0; i < globalDrawData.spotLightCount; i++)

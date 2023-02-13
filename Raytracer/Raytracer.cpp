@@ -6,6 +6,7 @@ void Raytracer::init(SDL_Window* window)
 {
 	int w = 0;
 	int h = 0;
+
 	SDL_GetWindowSize(window, &w, &h);
 
 	windowWidth = w;

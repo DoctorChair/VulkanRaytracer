@@ -52,17 +52,17 @@ struct SpotLight
 	float strength;
 };
 
-layout(std140,set = 2, binding = 0) readonly buffer SunBuffer{
+layout(std430,set = 2, binding = 0) readonly buffer SunBuffer{
 
 	SunLight sunLights[];
 } sunLightBuffer;
 
-layout(std140,set = 2, binding = 1) readonly buffer PointBuffer{
+layout(std430,set = 2, binding = 1) readonly buffer PointBuffer{
 
 	PointLight pointLights[];
 } pointLightBuffer;
 
-layout(std140,set = 2, binding = 2) readonly buffer SpotBuffer{
+layout(std430,set = 2, binding = 2) readonly buffer SpotBuffer{
 
 	SpotLight spotLights[];
 } spotLightBuffer;
@@ -140,11 +140,11 @@ void main()
 
 	vec3 radiance = vec3(0.0);
 
-	for(int i = 1; i < globalDrawData.sunLightCount; i++)
+	for(int i = 0; i < globalDrawData.sunLightCount; i++)
 	{
 	vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 	vec3 lightDirection = -normalize(sunLightBuffer.sunLights[i].direction);
-	
+
 	vec3 brdf = BRDF(viewDirection, lightDirection, normal, color, metallic, roughness, reflectance);
 
 	float irradiance = max(dot(normal, lightDirection), 0.0);

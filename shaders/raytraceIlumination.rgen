@@ -68,17 +68,17 @@ layout(set = 1, binding = 2) uniform sampler2D primaryRayDepthTexture;
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 2, binding = 1, rgba32f) uniform image2D image;
 
-layout(std140, set = 3, binding = 0) readonly buffer SunBuffer{
+layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
 
 	SunLight sunLights[];
 } sunLightBuffer;
 
-layout(std140, set = 3, binding = 1) readonly buffer PointBuffer{
+layout(std430, set = 3, binding = 1) readonly buffer PointBuffer{
 
 	PointLight pointLights[];
 } pointLightBuffer;
 
-layout(std140, set = 3, binding = 2) readonly buffer SpotBuffer{
+layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
 
 	SpotLight spotLights[];
 } spotLightBuffer; 
@@ -132,12 +132,40 @@ void main()
 
     vec4 outColor = color;
     
-     for(uint i = 0; i < globalDrawData.pointLightCount; i++)
+    normal.xyz = normalize(normal.xyz);
+
+    for(uint i = 0; i < globalDrawData.pointLightCount; i++)
     {
       vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
       float range = length(lightDirection);
       lightDirection = normalize(lightDirection);
-      normal.xyz = normalize(normal.xyz);
+      
+      float cosTheta = dot(lightDirection, normal.xyz);
+
+      shadowed = 0.3;
+      if(cosTheta > 0)
+      {
+        traceRayEXT(topLevelAS, // acceleration structure
+        shadowRayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        1,              // missIndex
+        samplePosition.xyz,     // ray origin
+        tMin,           // ray min range
+        lightDirection.xyz,  // ray direction
+        range,           // ray max range
+        0               // payload (location = 0)
+        );
+      }
+    }  
+
+    for(uint i = 0; i < globalDrawData.sunLightCount; i++)
+    {
+      vec3 lightDirection = -sunLightBuffer.sunLights[i].direction;
+      float range = tMax;
+      lightDirection = normalize(lightDirection);
+      
       float cosTheta = dot(lightDirection, normal.xyz);
 
       shadowed = 0.3;
@@ -156,16 +184,20 @@ void main()
         0               // payload (location = 0)
         );
       
-        outColor.xyz = outColor.xyz * shadowed;
+       
       }
     }  
+
+    outColor.xyz = outColor.xyz * shadowed;
 
     payload.miss = false;
     payload.position = samplePosition.xyz;
     payload.normal = normal.xyz;
+    
 
     vec3 priorPosition = cameraData.cameraPosition;
 
+    //glossy
     for(uint i = 0; i < globalDrawData.maxRecoursionDepth && !payload.miss; i++)
     {
       vec3 incommingDirection = normalize(payload.position - priorPosition);
@@ -180,18 +212,60 @@ void main()
         0,              // missIndex
         priorPosition,     // ray origin
         tMin,           // ray min range
-        outgoingdirection.xyz,  // ray direction
+        outgoingdirection,  // ray direction
         tMax,           // ray max range
         1               // payload (location = 1)
         );
 
-      float distance = length(priorPosition - payload.position);
+      if(!payload.miss)
+      {
+        float distance = length(priorPosition - payload.position);
 
-      outColor.xyz = (payload.color * (1.0/(distance*distance))) + outColor.xyz;
+        float irradiance = max(dot(normal.xyz, outgoingdirection), 0.0);
+
+        outColor.xyz = irradiance * payload.color + outColor.xyz;
+      }
     }
 
-   
+    priorPosition = samplePosition.xyz;
+    payload.miss = false;
+    payload.normal = normal.xyz;
+
+    vec3 sum = vec3(0.0, 0.0, 0.0);
     
-   
+    uint diffuseRayCount = 1;
+    //diffuse
+    for(uint i = 0; i < diffuseRayCount; i++)
+    {
+      vec3 diffuseDirection = normal.xyz;
+
+      traceRayEXT(topLevelAS, // acceleration structure
+        rayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        0,              // missIndex
+        samplePosition.xyz,     // ray origin
+        tMin,           // ray min range
+        diffuseDirection,  // ray direction
+        tMax,           // ray max range
+        1               // payload (location = 1)
+        );
+
+      if(!payload.miss)
+      {
+        float distance = length(samplePosition.xyz - payload.position);
+        float attenuation = 1.0/(distance*distance);
+
+        float irradiance = max(dot(normal.xyz, diffuseDirection), 0.0);
+
+        sum = irradiance * attenuation * payload.color + sum;
+      }
+    }
+    
+    sum = sum / float(diffuseRayCount);
+
+    outColor.xyz = outColor.xyz + sum;
+    //outColor.xyz = outColor.xyz / 3.0;
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

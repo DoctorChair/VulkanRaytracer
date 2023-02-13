@@ -69,7 +69,7 @@ int main(int argc, char* argv[])
 	point.color = glm::vec4(1.0f, 1.0f, 0.9f, 1.0f);
 
 	SunLight sun = {};
-	sun.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	sun.color = glm::vec4(1.0f , 1.0f, 1.0f, 1.0f);
 	sun.direction = glm::vec3(1.0f, -1.0f, 1.0f);
 	
 	SpotLight spot = {};

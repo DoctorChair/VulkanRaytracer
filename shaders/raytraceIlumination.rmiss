@@ -13,6 +13,6 @@ layout(location = 1) rayPayloadInEXT hitPayload incomigPayload;
 
 void main()
 {
-  incomigPayload.color = vec3(0.0, 0.0, 0.0);
+  incomigPayload.color = incomigPayload.color;
   incomigPayload.miss = true;
 }
