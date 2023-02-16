@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
 
 	SunLight sun = {};
 	sun.color = glm::vec4(1.0f , 1.0f, 1.0f, 1.0f);
-	sun.direction = glm::vec3(1.0f, -1.0f, 1.0f);
+	sun.direction = glm::vec3(0.0f, -1.0f, 0.0f);
 	
 	SpotLight spot = {};
 

@@ -58,12 +58,17 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint pointLightCount;
 	uint spotLightCount;
   uint maxRecoursionDepth;
+  uint maxDiffuseSampleCount;
+  uint maxSpecularSampleCount;
+  uint maxShadowRaySampleCount;
 } globalDrawData;
 
 
-layout(set = 1, binding = 0) uniform sampler2D primaryRayColorTexture;
+layout(set = 1, binding = 0) uniform sampler2D primaryRayLitColorTexture;
 layout(set = 1, binding = 1) uniform sampler2D primaryRayNormalTexture;
 layout(set = 1, binding = 2) uniform sampler2D primaryRayDepthTexture;
+layout(set = 1, binding = 3) uniform sampler2D primaryRayRoughnessMetalicTexture;
+layout(set = 1, binding = 4) uniform sampler2D primaryRayUnlitColorTexture;
 
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 2, binding = 1, rgba32f) uniform image2D image;
@@ -114,27 +119,35 @@ void main()
     const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
     const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
     
-    vec4 color = texture(primaryRayColorTexture, inUV);
+    vec4 litColor = texture(primaryRayLitColorTexture, inUV);
+    vec4 unlitColor = texture(primaryRayUnlitColorTexture, inUV);
     vec4 normal = texture(primaryRayNormalTexture, inUV);
     float depth = texture(primaryRayDepthTexture, inUV).x;
+    vec4 roughnessMetalness = texture(primaryRayRoughnessMetalicTexture, inUV);
+	
+    normal.xyz = normalize(normal.xyz);
+	  float reflectance = 0.04;	
+	  float roughness = roughnessMetalness.x;
+	  float metallic = roughnessMetalness.y;
 
     vec4 clipSpacePosition = vec4(inUV * 2.0 - 1.0, depth, 1.0);
     vec4 viewSpacePosition = cameraData.inverseProjectionMatrix * clipSpacePosition;
     viewSpacePosition = viewSpacePosition / viewSpacePosition.w;
 	  vec4 samplePosition = cameraData.inverseViewMatrix * viewSpacePosition;
 
-    
-
     uint  rayFlags = gl_RayFlagsOpaqueEXT;
     uint  shadowRayFlags =  gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
     float tMin     = 0.001;
     float tMax     = 10000.0;
 
-    vec4 outColor = color;
+    vec4 outColor = litColor;
     
-    normal.xyz = normalize(normal.xyz);
+    shadowed = 0.0;
 
-    for(uint i = 0; i < globalDrawData.pointLightCount; i++)
+    float pointShadow = shadowed;
+    float sunShadow = shadowed;
+
+    for(uint i = 0; i < globalDrawData.pointLightCount && !(shadowed == 1.0); i++)
     {
       vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
       float range = length(lightDirection);
@@ -142,7 +155,6 @@ void main()
       
       float cosTheta = dot(lightDirection, normal.xyz);
 
-      shadowed = 0.3;
       if(cosTheta > 0)
       {
         traceRayEXT(topLevelAS, // acceleration structure
@@ -158,9 +170,12 @@ void main()
         0               // payload (location = 0)
         );
       }
+
+      pointShadow = shadowed;
     }  
 
-    for(uint i = 0; i < globalDrawData.sunLightCount; i++)
+    shadowed = 0.0;
+    for(uint i = 0; i < globalDrawData.sunLightCount && !(shadowed == 1.0); i++)
     {
       vec3 lightDirection = -sunLightBuffer.sunLights[i].direction;
       float range = tMax;
@@ -168,7 +183,6 @@ void main()
       
       float cosTheta = dot(lightDirection, normal.xyz);
 
-      shadowed = 0.3;
       if(cosTheta > 0)
       {
         traceRayEXT(topLevelAS, // acceleration structure
@@ -183,19 +197,20 @@ void main()
         range,           // ray max range
         0               // payload (location = 0)
         );
-      
-       
       }
+
+      sunShadow = shadowed;
     }  
 
-    outColor.xyz = outColor.xyz * shadowed;
+    outColor.xyz = outColor.xyz * max(sunShadow, pointShadow);
 
     payload.miss = false;
     payload.position = samplePosition.xyz;
     payload.normal = normal.xyz;
     
-
     vec3 priorPosition = cameraData.cameraPosition;
+
+    vec3 glossyIndirectLight = vec3(0.0);
 
     //glossy
     for(uint i = 0; i < globalDrawData.maxRecoursionDepth && !payload.miss; i++)
@@ -221,18 +236,22 @@ void main()
       {
         float distance = length(priorPosition - payload.position);
 
-        float irradiance = max(dot(normal.xyz, outgoingdirection), 0.0);
-
-        outColor.xyz = irradiance * payload.color + outColor.xyz;
+        glossyIndirectLight = payload.color + glossyIndirectLight;
       }
     }
 
-    priorPosition = samplePosition.xyz;
+    vec3 viewDirection = normalize(samplePosition.xyz - cameraData.cameraPosition);
+    vec3 incomingGlossyLightDirection = reflect(viewDirection, normal.xyz);
+    float irradiance = max(dot(normal.xyz, incomingGlossyLightDirection), 0.0);
+    glossyIndirectLight = BRDF(-viewDirection, incomingGlossyLightDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) * glossyIndirectLight * irradiance;
+
+    outColor.xyz = outColor.xyz + glossyIndirectLight;
+    
     payload.miss = false;
     payload.normal = normal.xyz;
 
-    vec3 sum = vec3(0.0, 0.0, 0.0);
     
+    vec3 diffuseIndiectLight = vec3(0.0, 0.0, 0.0);
     uint diffuseRayCount = 1;
     //diffuse
     for(uint i = 0; i < diffuseRayCount; i++)
@@ -257,15 +276,12 @@ void main()
         float distance = length(samplePosition.xyz - payload.position);
         float attenuation = 1.0/(distance*distance);
 
-        float irradiance = max(dot(normal.xyz, diffuseDirection), 0.0);
-
-        sum = irradiance * attenuation * payload.color + sum;
+        diffuseIndiectLight = payload.color + diffuseIndiectLight;
       }
     }
-    
-    sum = sum / float(diffuseRayCount);
+    diffuseIndiectLight = BRDF(-viewDirection, normal.xyz, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) * diffuseIndiectLight;
 
-    outColor.xyz = outColor.xyz + sum;
-    //outColor.xyz = outColor.xyz / 3.0;
+    outColor.xyz = outColor.xyz + diffuseIndiectLight;
+
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

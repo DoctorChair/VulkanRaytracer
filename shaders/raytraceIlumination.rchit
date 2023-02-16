@@ -188,7 +188,7 @@ void main()
 	
 	float tMin = 0.01;
 	
-	float shadowValue = 0.3;
+	float shadowValue = 0.0;
 
 	vec3 radiance = vec3(0.0, 0.0, 0.0);
 
@@ -228,7 +228,7 @@ void main()
 
 				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 				float irradiance = max(dot(normal, lightDirection), 0.0);
-				radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;				
+				radiance =  radiance + irradiance * brdf * lightColor * 100.0 * attenuation;				
 			}
 				
    		}
@@ -266,7 +266,7 @@ void main()
 
 				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 				float irradiance = max(dot(normal, lightDirection), 0.0);
-				radiance =  radiance + irradiance * brdf * lightColor;				
+				radiance =  radiance + irradiance * brdf * 100.0 * lightColor;				
 			}
 				
    		} 

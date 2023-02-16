@@ -257,7 +257,7 @@ private:
 	uint32_t _maxSunLights = 10;
 	uint32_t _maxPointLighst = 10;
 	uint32_t _maxSpotLights = 10;
-	uint32_t _maxRecoursionDepth = 1;
+	uint32_t _maxRecoursionDepth = 2;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;

@@ -646,6 +646,16 @@ void Raytracer::updateRaytraceDescripotrSets()
 	depthInfo.imageView = currentGBuffer->depthView;
 	depthInfo.sampler = _raytraceShader.getSamplers()[2];
 
+	VkDescriptorImageInfo roughnessMetalnessInfo;
+	roughnessMetalnessInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	roughnessMetalnessInfo.imageView = currentGBuffer->roughnessMetalnessView;
+	roughnessMetalnessInfo.sampler = _raytraceShader.getSamplers()[3];
+
+	VkDescriptorImageInfo unlitColorInfo;
+	unlitColorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	unlitColorInfo.imageView = currentGBuffer->colorView;
+	unlitColorInfo.sampler = _raytraceShader.getSamplers()[4];
+
 	VkDescriptorImageInfo outColorInfo;
 	outColorInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	outColorInfo.imageView = _raytraceBufferChain[_currentFrameIndex].colorView;
@@ -672,6 +682,8 @@ void Raytracer::updateRaytraceDescripotrSets()
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &colorInfo, nullptr, 1, 0, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normalInfo, nullptr, 1, 0, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &depthInfo, nullptr, 1, 0, 2)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &roughnessMetalnessInfo, nullptr, 1, 0, 3)
+		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &unlitColorInfo, nullptr, 1, 0, 4)
 		.bindAccelerationStructure(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, &accelWrite, 1, 1, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &outColorInfo, nullptr, 1, 1, 1)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vertexInfo, 1, 1, 2)
@@ -861,6 +873,12 @@ void Raytracer::executeDefferedPass()
 	currentGBuffer->colorBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,
 		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, 
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+
+	currentGBuffer->roughnessMetalnessBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 		VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
 
@@ -1156,6 +1174,8 @@ void Raytracer::initDescriptorSetLayouts()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
+		.addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout1);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1333,7 +1353,9 @@ void Raytracer::initRaytraceShader()
 
 	vkCreatePipelineLayout(_vulkan._device, &createInfo, nullptr, &_raytracePipelineLayout);
 	
-	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, 10, 4);
+	uint32_t numSamplers = 10;
+
+	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, 10, numSamplers);
 }
 
 void Raytracer::initCompositingShader()
