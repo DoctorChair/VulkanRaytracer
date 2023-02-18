@@ -11,7 +11,7 @@ layout(set = 0, binding = 0, rgba32f) uniform image2D image;
 
 void main()
 {
-	float exposure = 15.0;
+	float exposure = 30.0;
 	float gamma = 2.2;
 
 	ivec2 pixCoord = ivec2((texCoord*1024));

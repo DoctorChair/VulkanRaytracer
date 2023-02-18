@@ -27,6 +27,25 @@ void TextureLoader::loadSceneTextures(const aiScene* scene, const std::string& r
 	}
 }
 
+TextureData TextureLoader::loadTexture(const std::string& path)
+{
+	TextureData textureData;
+
+	int width, height, nrChannels;
+	unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
+	if (data != nullptr)
+	{
+		textureData.height = static_cast<unsigned int>(height);
+		textureData.width = static_cast<unsigned int>(width);
+		textureData.nrChannels = static_cast<unsigned int>(nrChannels);
+		textureData.pixels.resize(textureData.width * textureData.height * textureData.nrChannels);
+		memcpy(textureData.pixels.data(), data, textureData.width * textureData.height * textureData.nrChannels * sizeof(unsigned char));
+		std::cout << "Loaded texture: " << path << "\n";
+	}
+
+	return textureData;
+}
+
 std::string TextureLoader::getTextureSubPath(aiMaterial* material, aiTextureType type)
 {
 	std::string texturePath;

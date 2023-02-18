@@ -69,7 +69,11 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint sunLightCount;
 	uint pointLightCount;
 	uint spotLightCount;
-	uint maxRecoursionDepth;
+  	uint maxRecoursionDepth;
+  	uint maxDiffuseSampleCount;
+  	uint maxSpecularSampleCount;
+  	uint maxShadowRaySampleCount;
+  	uint noiseSampleTextureIndex;
 } globalDrawData;
 
 layout(set = 1, binding = 0) uniform sampler2D primaryRayColorTexture;
@@ -228,7 +232,7 @@ void main()
 
 				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 				float irradiance = max(dot(normal, lightDirection), 0.0);
-				radiance =  radiance + irradiance * brdf * lightColor * 100.0 * attenuation;				
+				radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;				
 			}
 				
    		}
@@ -266,14 +270,10 @@ void main()
 
 				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 				float irradiance = max(dot(normal, lightDirection), 0.0);
-				radiance =  radiance + irradiance * brdf * 100.0 * lightColor;				
+				radiance =  radiance + irradiance * brdf * lightColor;				
 			}
 				
    		} 
-    }
-
-    for(uint i = 0; i < globalDrawData.spotLightCount; i++)
-    { 
     }
 
 	incomigPayload.color = radiance;

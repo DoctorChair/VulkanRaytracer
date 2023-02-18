@@ -14,7 +14,9 @@
 class TextureLoader
 {
 public:
+	TextureLoader() = default;
 	void operator()(const aiScene* scene, const std::string& root, aiTextureType type, std::unordered_map<std::string, TextureData>* textureMap);
+	TextureData loadTexture(const std::string& path);
 
 private:
 	std::string getTextureSubPath(aiMaterial* material, aiTextureType type);

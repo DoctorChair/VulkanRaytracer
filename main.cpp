@@ -2,6 +2,7 @@
 #include "ModelLoader/ModelLoader.h"
 #include "Raytracer/Raytracer.h"
 #include "glm/gtc/matrix_transform.hpp"
+#include "ModelLoader/TextureLoader.h"
 
 #include "CameraController.h"
 
@@ -9,11 +10,18 @@ int main(int argc, char* argv[])
 {
 	SDL_Init(SDL_INIT_VIDEO);
 	SDL_Window* window = SDL_CreateWindow("Vulkan", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-		1024, 1024,
+		1920, 1080,
 		SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	Raytracer raytracer;
-	raytracer.init(window);
+	raytracer.init(window, 1920, 1080);
+
+	TextureLoader textureLoader;
+	TextureData noiseTexture = textureLoader.loadTexture("C:\\Users\\Eric\\Downloads\\FreeBlueNoiseTextures\\Data\\64_64\\LDR_RG01_0.png");
+	
+	uint32_t noiseTexureIndex = raytracer.loadTexture(noiseTexture.pixels, noiseTexture.width, noiseTexture.height, noiseTexture.nrChannels, "blueNoiseSampleTexture");
+
+	raytracer.setNoiseTextureIndex(noiseTexureIndex);
 
 	ModelLoader loader;
 	
@@ -68,6 +76,10 @@ int main(int argc, char* argv[])
 	point.position = glm::vec3(0.0f, 2.0f, 0.0f);
 	point.color = glm::vec4(1.0f, 1.0f, 0.9f, 1.0f);
 
+	PointLight point2 = {};
+	point2.position = glm::vec3(0.0f, 8.0f, 0.0f);
+	point2.color = glm::vec4(1.0f, 1.0f, 0.9f, 1.0f);
+
 	SunLight sun = {};
 	sun.color = glm::vec4(1.0f , 1.0f, 1.0f, 1.0f);
 	sun.direction = glm::vec3(0.0f, -1.0f, 0.0f);
@@ -78,7 +90,6 @@ int main(int argc, char* argv[])
 
 	CameraController camera(100.0f, 20.0f, 90.0f, 1.0f, 0.1f, 1000.0f, up);
 	
-
 	bool quit = false;
 	SDL_Event e;
 
@@ -154,6 +165,13 @@ int main(int argc, char* argv[])
 					break;
 				}
 			}
+			if (e.type == SDL_WINDOWEVENT)
+			{
+				if(e.window.event == SDL_WINDOWEVENT_RESIZED)
+				{
+					
+				}
+			}
 		}
 
 		camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
@@ -166,7 +184,8 @@ int main(int argc, char* argv[])
 			id++;
 		}
 		
-		raytracer.drawPointLight(point);
+		//raytracer.drawPointLight(point);
+		raytracer.drawPointLight(point2);
 		raytracer.drawSpotLight(spot);
 		raytracer.drawSunLight(sun);
 		raytracer.update();

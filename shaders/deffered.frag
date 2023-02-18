@@ -19,7 +19,11 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint sunLightCount;
 	uint pointLightCount;
 	uint spotLightCount;
-	uint maxRecoursionDepth;
+  	uint maxRecoursionDepth;
+  	uint maxDiffuseSampleCount;
+  	uint maxSpecularSampleCount;
+ 	uint maxShadowRaySampleCount;
+  	uint noiseSampleTextureIndex;
 } globalDrawData;
 
 
@@ -116,7 +120,7 @@ vec3 BRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, floa
 	lambert = lambert * (1.0 - metallic);
 	lambert = lambert / M_PI;
 
-	return  lambert  + specular;
+	return  lambert + specular;
 }
 
 void main()
@@ -140,7 +144,7 @@ void main()
 
 	vec3 radiance = vec3(0.0);
 
-	for(int i = 0; i < globalDrawData.sunLightCount; i++)
+	for(int i = 1; i < globalDrawData.sunLightCount; i++)
 	{
 	vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 	vec3 lightDirection = -normalize(sunLightBuffer.sunLights[i].direction);
@@ -167,7 +171,7 @@ void main()
 
 	float irradiance = max(dot(normal, lightDirection), 0.0);
 
-	radiance =  radiance + irradiance * brdf * lightColor * 100.0 * attenuation;
+	radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;
 	}
 
 	outColor = vec4(radiance, 1.0f);

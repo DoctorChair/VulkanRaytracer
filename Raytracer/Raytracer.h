@@ -128,10 +128,14 @@ struct Model
 struct GlobalRenderData
 {
 	float fog;
-	uint32_t sunLightCount = 0;
-	uint32_t pointLightCout = 0;
-	uint32_t spotLightCount = 0;
-	uint32_t maxRecoursionDepth = 0;
+	uint32_t sunLightCount;
+	uint32_t pointLightCount;
+	uint32_t spotLightCount;
+	uint32_t maxRecoursionDepth;
+	uint32_t maxDiffuseSampleCount;
+	uint32_t maxSpecularSampleCount;
+	uint32_t maxShadowRaySampleCount;
+	uint32_t noiseSampleTextureIndex;
 };
 
 struct CameraData
@@ -186,10 +190,11 @@ class Raytracer
 {
 public:
 	Raytracer() = default;
-	void init(SDL_Window* window);
+	void init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHeight);
+	void resizeSwapchain(uint32_t windowWidth, uint32_t windowHeight);
 
 	Mesh loadMesh(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, const std::string& name);
-	uint32_t loadTexture(std::vector<unsigned char> pixels, uint32_t width, uint32_t height, uint32_t nr_channels, const std::string& name);
+	uint32_t loadTexture(std::vector<unsigned char>& pixels, uint32_t width, uint32_t height, uint32_t nr_channels, const std::string& name);
 
 	MeshInstance getMeshInstance(const std::string& name);
 
@@ -198,6 +203,8 @@ public:
 
 	//update tlas and place draw call;
 	void drawMeshInstance(MeshInstance instance, glm::mat4 transform);
+	void setNoiseTextureIndex(uint32_t index);
+
 
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
@@ -242,8 +249,8 @@ private:
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
 	VGM::VulkanContext _vulkan;
-	uint32_t windowWidth;
-	uint32_t windowHeight;
+	uint32_t _windowWidth;
+	uint32_t _windowHeight;
 
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
@@ -254,10 +261,17 @@ private:
 	uint32_t _maxTriangleCount = 12000000;
 	uint32_t _maxMipMapLevels = 4;
 	uint64_t _timeout = 100000000;
+	
 	uint32_t _maxSunLights = 10;
 	uint32_t _maxPointLighst = 10;
 	uint32_t _maxSpotLights = 10;
+	
 	uint32_t _maxRecoursionDepth = 2;
+	uint32_t _diffuseSampleCount = 2;
+	uint32_t _specularSampleCount = 2;
+
+	uint32_t nativeWidth = 1024;
+	uint32_t nativeHeight = 1024;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;

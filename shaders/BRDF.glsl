@@ -48,3 +48,22 @@ vec3 BRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, floa
 
 	return  lambert  + specular;
 }
+
+vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float maxPhiDeviationAngle, float randomTheta, float randomPhi)
+{
+	vec3 sampleVector;
+
+	vec3 tangent = normalize(vec3(0.0, -originVector.z, originVector.y) * float(originVector.y >= originVector.x) 
+	+ vec3(originVector.z, 0.0, -originVector.x) * float(originVector.x > originVector.y));
+	
+	originVector = normalize(originVector);
+	vec3 bitangnet = cross(originVector, tangent);
+
+	mat3 tbnMatrix = mat3(tangent, bitangnet, originVector);
+
+	sampleVector.x = sin(maxThetaDeviationAngle * randomTheta) * cos(maxPhiDeviationAngle * randomPhi);
+	sampleVector.y = cos(maxThetaDeviationAngle * randomTheta);
+	sampleVector.z = sin(maxThetaDeviationAngle * randomTheta) * sin(maxPhiDeviationAngle * randomPhi);
+
+	return tbnMatrix * normalize(sampleVector.xzy);
+}
