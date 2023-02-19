@@ -5,43 +5,7 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "BRDF.glsl"
-
-struct SunLight
-{
-	vec3 direction;
-	vec4 color;
-};
-
-struct PointLight
-{
-	vec3 position;
-	vec4 color;
-	float strength;
-};
-
-struct SpotLight
-{
-	vec3 position;
-	vec3 direction;
-	float openingAngle;
-	vec4 color;
-	float strength;
-};
-
-struct Material
-{
-	uint albedoIndex;
-	uint metallicIndex;
-	uint normalIndex;
-	uint roughnessIndex;	
-};
-
-struct drawInstanceData
-{
-	mat4 modelMatrix;
-	Material material;
-	uint ID;
-};
+#include "common.glsl"
 
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
@@ -108,7 +72,7 @@ struct hitPayload
   vec3 position;
 };
 
-layout(location = 0) rayPayloadEXT float shadowed;
+layout(location = 0) rayPayloadEXT float shadowPayload;
 layout(location = 1) rayPayloadEXT hitPayload payload;
 
 
@@ -134,47 +98,66 @@ void main()
     viewSpacePosition = viewSpacePosition / viewSpacePosition.w;
 	  vec4 samplePosition = cameraData.inverseViewMatrix * viewSpacePosition;
 
+    vec3 viewDirection = normalize(cameraData.cameraPosition - samplePosition.xyz);
+
     uint  rayFlags = gl_RayFlagsOpaqueEXT;
     uint  shadowRayFlags =  gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
     float tMin     = 0.001;
     float tMax     = 10000.0;
 
-    vec4 outColor = litColor;
+    vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV*20.0);
+
+    vec4 outColor = vec4(0.0, 0.0, 0.0, 1.0);
     
-    float pointShadow = shadowed;
-    float sunShadow = shadowed;
+    vec3 radiance = vec3(0.0, 0.0, 0.0);
 
-    shadowed = 0.0;
-    for(uint i = 0; i < globalDrawData.pointLightCount && !(shadowed == 1.0); i++)
+    for(uint i = 0; i < globalDrawData.pointLightCount; i++)
     {
+      shadowPayload = 0.0;
       vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
-      float range = length(lightDirection);
+      float distance = length(lightDirection);
       lightDirection = normalize(lightDirection);
-      
       float cosTheta = dot(lightDirection, normal.xyz);
-
-      if(cosTheta > 0)
+      
+      for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount; s++)
       {
-        traceRayEXT(topLevelAS, // acceleration structure
-        shadowRayFlags,       // rayFlags
-        0xFF,           // cullMask
-        0,              // sbtRecordOffset
-        0,              // sbtRecordStride
-        1,              // missIndex
-        samplePosition.xyz,     // ray origin
-        tMin,           // ray min range
-        lightDirection.xyz,  // ray direction
-        range,           // ray max range
-        0               // payload (location = 0)
-        );
-      }
+        vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(s), float(s)) + inUV * 20.0);
+        
+        float radius = pointLightBuffer.pointLights[i].radius;
+        float angle = atan(radius/distance);
+        lightDirection = createSampleVector(lightDirection, angle, angle, noise.x - 0.5, noise.y - 0.5);
 
-      pointShadow = shadowed;
+        if(cosTheta > 0)
+        {
+          traceRayEXT(topLevelAS, // acceleration structure
+          shadowRayFlags,       // rayFlags
+          0xFF,           // cullMask
+          0,              // sbtRecordOffset
+          0,              // sbtRecordStride
+          1,              // missIndex
+          samplePosition.xyz,     // ray origin
+          tMin,           // ray min range
+          lightDirection,  // ray direction
+          distance,           // ray max range
+          0               // payload (location = 0)
+          );
+          vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
+
+	        float attenuation = 1.0/(distance*distance);
+
+	        lightDirection = normalize(lightDirection);
+
+	        vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) * shadowPayload;
+
+	        radiance =  radiance + max(cosTheta, 0.0) * brdf * lightColor * 50.0 * attenuation;
+        }
+      }
     }  
 
-    shadowed = 0.0;
-    for(uint i = 0; i < globalDrawData.sunLightCount && !(shadowed == 1.0); i++)
+   
+    for(uint i = 0; i < globalDrawData.sunLightCount; i++)
     {
+      shadowPayload = 0.0;
       vec3 lightDirection = -sunLightBuffer.sunLights[i].direction;
       float range = tMax;
       lightDirection = normalize(lightDirection);
@@ -195,12 +178,17 @@ void main()
         range,           // ray max range
         0               // payload (location = 0)
         );
-      }
 
-      sunShadow = shadowed;
+        vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
+	      vec3 lightDirection = -normalize(sunLightBuffer.sunLights[i].direction);
+
+	      vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) * shadowPayload;
+	
+	      radiance =  radiance + max(cosTheta, 0.0) * brdf * 2.0 * lightColor;
+      }
     }  
 
-    outColor.xyz = outColor.xyz * max(sunShadow, pointShadow);
+    outColor.xyz = radiance;
 
     payload.miss = false;
     payload.position = samplePosition.xyz;
@@ -211,12 +199,12 @@ void main()
 
     vec3 glossyIndirectLight = vec3(0.0);
 
-    vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV);
+    
 
     //single bounce diffuse indirect light
     for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
     {
-      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV + vec2(1.0/float(i), 1.0/float(i) + screenNoise.xy));
+      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV*20.0 + vec2(1.0/float(i), 1.0/float(i) + screenNoise.xy));
       vec3 sampleVector = createSampleVector(normal.xyz, M_PI, M_PI * 0.5, noise.x - 0.5, noise.y - 0.5);
 
       traceRayEXT(topLevelAS, // acceleration structure

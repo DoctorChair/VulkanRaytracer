@@ -7,54 +7,7 @@
 #extension GL_EXT_buffer_reference2: require
 
 #include "BRDF.glsl"
-
-struct SunLight
-{
-	vec3 direction;
-	vec4 color;
-};
-
-struct PointLight
-{
-	vec3 position;
-	vec4 color;
-	float strength;
-};
-
-struct SpotLight
-{
-	vec3 position;
-	vec3 direction;
-	float openingAngle;
-	vec4 color;
-	float strength;
-};
-
-struct Material
-{
-	uint albedoIndex;
-	uint metallicIndex;
-	uint normalIndex;
-	uint roughnessIndex;	
-};
-
-struct drawInstanceData
-{
-	mat4 modelMatrix;
-	Material material;
-	uint ID;
-};
-
-struct Vertex
-{
-	vec3 position;
-	vec3 normal;
-	vec3 tangent;
-	vec2 texCoord0;
-	vec2 texCoord1;
-	vec2 texCoord2;
-	vec2 texCoord3;
-};
+#include "common.glsl"
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 viewMatrix;
@@ -230,9 +183,8 @@ void main()
 
 				lightDirection = normalize(lightDirection);
 
-				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
-				float irradiance = max(dot(normal, lightDirection), 0.0);
-				radiance =  radiance + irradiance * brdf * lightColor * 50.0 * attenuation;				
+				vec3 brdf = cookTorranceGgxBRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
+				radiance =  radiance + max(cosTheta, 0.0) * brdf * lightColor * 60.0 * attenuation;				
 			}
 				
    		}
@@ -268,9 +220,8 @@ void main()
 
 				lightDirection = normalize(lightDirection);
 
-				vec3 brdf = BRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
-				float irradiance = max(dot(normal, lightDirection), 0.0);
-				radiance =  radiance + irradiance * brdf * lightColor;				
+				vec3 brdf = cookTorranceGgxBRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
+				radiance =  radiance + max(cosTheta, 0.0) * brdf * 2.0 * lightColor;				
 			}
 				
    		} 

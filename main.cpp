@@ -73,16 +73,18 @@ int main(int argc, char* argv[])
 	loader.freeAssets();
 
 	PointLight point = {};
+	point.diameter = 0.4f;
 	point.position = glm::vec3(0.0f, 2.0f, 0.0f);
-	point.color = glm::vec4(1.0f, 1.0f, 0.9f, 1.0f);
+	point.color = glm::vec3(1.0f, 1.0f, 0.9f);
 
 	PointLight point2 = {};
+	point2.diameter = 0.1f;
 	point2.position = glm::vec3(0.0f, 8.0f, 0.0f);
-	point2.color = glm::vec4(1.0f, 1.0f, 0.9f, 1.0f);
+	point2.color = glm::vec3(1.0f, 1.0f, 0.0f);
 
 	SunLight sun = {};
-	sun.color = glm::vec4(1.0f , 1.0f, 1.0f, 1.0f);
-	sun.direction = glm::vec3(0.0f, -1.0f, 0.0f);
+	sun.color = glm::vec3(1.0f , 1.0f, 1.0f);
+	sun.direction = glm::vec3(1.0f, -1.0f, 0.0f);
 	
 	SpotLight spot = {};
 
@@ -184,7 +186,7 @@ int main(int argc, char* argv[])
 			id++;
 		}
 		
-		//raytracer.drawPointLight(point);
+		raytracer.drawPointLight(point);
 		raytracer.drawPointLight(point2);
 		raytracer.drawSpotLight(spot);
 		raytracer.drawSunLight(sun);

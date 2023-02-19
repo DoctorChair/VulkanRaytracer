@@ -605,17 +605,17 @@ void Raytracer::updateDefferedDescriptorSets()
 	VkDescriptorBufferInfo sunInfo = {};
 	sunInfo.buffer = currentSunLightBuffer->get();
 	sunInfo.offset = 0;
-	sunInfo.range = currentSunLightBuffer->size();
+	sunInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorBufferInfo pointInfo = {};
 	pointInfo.buffer = currentPointLightBuffer->get();
 	pointInfo.offset = 0;
-	pointInfo.range = currentPointLightBuffer->size();
+	pointInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorBufferInfo spotInfo = {};
 	spotInfo.buffer = currentSpotLightBuffer->get();
 	spotInfo.offset = 0;
-	spotInfo.range = currentSpotLightBuffer->size();
+	spotInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorSet sets[] = { _defferedDescriptorSets[_currentFrameIndex], _lightDescripotrSets[_currentFrameIndex] };
 
@@ -736,14 +736,17 @@ void Raytracer::executeDefferedPass()
 	_drawIndirectCommandBuffer[_currentFrameIndex].uploadData(_drawCommandTransferCache.data(),
 		_drawCommandTransferCache.size() * sizeof(VkDrawIndexedIndirectCommand),
 		_vulkan._generalPurposeAllocator);
+
 	_drawDataIsntanceBuffers[_currentFrameIndex].uploadData(_drawDataTransferCache.data(),
 		_drawDataTransferCache.size() * sizeof(DrawData),
 		_vulkan._generalPurposeAllocator);
 
 	_sunLightBuffers[_currentFrameIndex].uploadData(_sunLightTransferCache.data(),
 		_sunLightTransferCache.size() * sizeof(SunLight), _vulkan._generalPurposeAllocator);
+
 	_pointLightBuffers[_currentFrameIndex].uploadData(_pointLightTransferCache.data(),
 		_pointLightTransferCache.size() * sizeof(PointLight), _vulkan._generalPurposeAllocator);
+
 	_spotLightBuffers[_currentFrameIndex].uploadData(_spotLightTransferCache.data(),
 		_spotLightTransferCache.size() * sizeof(SpotLight), _vulkan._generalPurposeAllocator);
 
@@ -753,6 +756,7 @@ void Raytracer::executeDefferedPass()
 	_globalRenderData.maxRecoursionDepth = _maxRecoursionDepth;
 	_globalRenderData.maxDiffuseSampleCount = _diffuseSampleCount;
 	_globalRenderData.maxSpecularSampleCount = _specularSampleCount;
+	_globalRenderData.maxShadowRaySampleCount = _shadowSampleCount;
 
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&_globalRenderData, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
@@ -864,7 +868,7 @@ void Raytracer::executeDefferedPass()
 	currentDefferedBuffer->colorBuffer.cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-	VkDescriptorSet defferedSets[] = {
+	/*VkDescriptorSet defferedSets[] = {
 		_globalDescriptorSets[_currentFrameIndex],
 		_defferedDescriptorSets[_currentFrameIndex],
 		_lightDescripotrSets[_currentFrameIndex] };
@@ -876,7 +880,7 @@ void Raytracer::executeDefferedPass()
 
 	vkCmdDraw(defferedCmd->get(), 3, 1, 0, 0);
 
-	currentDefferedBuffer->framebuffer.cmdEndRendering(defferedCmd->get());
+	currentDefferedBuffer->framebuffer.cmdEndRendering(defferedCmd->get());*/
 
 	subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	currentGBuffer->colorBuffer.cmdTransitionLayout(defferedCmd->get(), subresource,

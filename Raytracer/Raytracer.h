@@ -166,14 +166,16 @@ struct FrameSynchro
 struct SunLight
 {
 	glm::vec3 direction;
-	glm::vec4 color;
-	float padding;
+	float padding0;
+	glm::vec3 color;
+	float padding1;
 };
 
 struct PointLight
 {
 	glm::vec3 position;
-	glm::vec4 color;
+	float diameter;
+	glm::vec3 color;
 	float strength;
 };
 
@@ -267,8 +269,9 @@ private:
 	uint32_t _maxSpotLights = 10;
 	
 	uint32_t _maxRecoursionDepth = 2;
-	uint32_t _diffuseSampleCount = 2;
+	uint32_t _diffuseSampleCount = 3;
 	uint32_t _specularSampleCount = 2;
+	uint32_t _shadowSampleCount = 8;
 
 	uint32_t nativeWidth = 1024;
 	uint32_t nativeHeight = 1024;
