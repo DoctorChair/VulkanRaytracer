@@ -269,9 +269,9 @@ private:
 	uint32_t _maxSpotLights = 10;
 	
 	uint32_t _maxRecoursionDepth = 2;
-	uint32_t _diffuseSampleCount = 3;
+	uint32_t _diffuseSampleCount = 4;
 	uint32_t _specularSampleCount = 2;
-	uint32_t _shadowSampleCount = 8;
+	uint32_t _shadowSampleCount = 4;
 
 	uint32_t nativeWidth = 1024;
 	uint32_t nativeHeight = 1024;

@@ -200,11 +200,10 @@ void main()
     vec3 glossyIndirectLight = vec3(0.0);
 
     
-
     //single bounce diffuse indirect light
     for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
     {
-      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV*20.0 + vec2(1.0/float(i), 1.0/float(i) + screenNoise.xy));
+      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV + vec2(1.0/float(i), 1.0/float(i) + screenNoise.xy));
       vec3 sampleVector = createSampleVector(normal.xyz, M_PI, M_PI * 0.5, noise.x - 0.5, noise.y - 0.5);
 
       traceRayEXT(topLevelAS, // acceleration structure
