@@ -9,12 +9,17 @@ layout (location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 0, rgba32f) uniform image2D image;
 
+layout( push_constant ) uniform constants
+{
+	ivec2 nativeResolution;
+} PushConstants;
+
 void main()
 {
-	float exposure = 30.0;
+	float exposure = 5.0;
 	float gamma = 2.2;
 
-	ivec2 pixCoord = ivec2((texCoord*1024));
+	ivec2 pixCoord = ivec2((texCoord*PushConstants.nativeResolution));
    
     vec4 hdrColor = imageLoad(image, pixCoord);
     vec4 mapped = vec4(1.0) - exp(-hdrColor * exposure);

@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
 	raytracer.init(window, 1920, 1080);
 
 	TextureLoader textureLoader;
-	TextureData noiseTexture = textureLoader.loadTexture("C:\\Users\\Eric\\Downloads\\FreeBlueNoiseTextures\\Data\\64_64\\LDR_RG01_0.png");
+	TextureData noiseTexture = textureLoader.loadTexture("C:\\Users\\Eric\\projects\\textures\\FreeBlueNoiseTextures\\Data\\1024_1024\\LDR_RGBA_0.png");
 	
 	uint32_t noiseTexureIndex = raytracer.loadTexture(noiseTexture.pixels, noiseTexture.width, noiseTexture.height, noiseTexture.nrChannels, "blueNoiseSampleTexture");
 
@@ -73,9 +73,10 @@ int main(int argc, char* argv[])
 	loader.freeAssets();
 
 	PointLight point = {};
-	point.diameter = 0.4f;
-	point.position = glm::vec3(0.0f, 9.0f, 0.0f);
+	point.diameter = 0.2f;
+	point.position = glm::vec3(0.0f, 2.0f, 0.0f);
 	point.color = glm::vec3(1.0f, 1.0f, 0.9f);
+	point.strength = 10.0f;
 
 	PointLight point2 = {};
 	point2.diameter = 0.1f;
@@ -187,7 +188,6 @@ int main(int argc, char* argv[])
 		}
 		
 		raytracer.drawPointLight(point);
-		//raytracer.drawPointLight(point2);
 		raytracer.drawSpotLight(spot);
 		raytracer.drawSunLight(sun);
 		raytracer.update();

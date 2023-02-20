@@ -66,7 +66,7 @@ vec3 cookTorrancePhongBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal,
 
 	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
 	float geometric = geometricFunction(normalDotView, normalDotLightDir, alpha * 0.5);
-	float ndf = ndfPhong(normalDotHalfway, 1.0/roughness);
+	float ndf = ndfPhong(normalDotHalfway, 1.0 - roughness);
 
 	vec3 specular = ( ndf * fresnel * geometric )
 					/ (4 * max(normalDotLightDir, 0.0001) * max(normalDotView, 0.0001));

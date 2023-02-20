@@ -269,12 +269,12 @@ private:
 	uint32_t _maxSpotLights = 10;
 	
 	uint32_t _maxRecoursionDepth = 2;
-	uint32_t _diffuseSampleCount = 4;
+	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 2;
 	uint32_t _shadowSampleCount = 4;
 
-	uint32_t nativeWidth = 1024;
-	uint32_t nativeHeight = 1024;
+	uint32_t nativeWidth = 1920;
+	uint32_t nativeHeight = 1080;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;

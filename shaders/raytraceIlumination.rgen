@@ -29,11 +29,10 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 } globalDrawData;
 
 
-layout(set = 1, binding = 0) uniform sampler2D primaryRayLitColorTexture;
+layout(set = 1, binding = 0) uniform sampler2D primaryRayUnlitColorTexture;
 layout(set = 1, binding = 1) uniform sampler2D primaryRayNormalTexture;
 layout(set = 1, binding = 2) uniform sampler2D primaryRayDepthTexture;
 layout(set = 1, binding = 3) uniform sampler2D primaryRayRoughnessMetalicTexture;
-layout(set = 1, binding = 4) uniform sampler2D primaryRayUnlitColorTexture;
 
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 2, binding = 1, rgba32f) uniform image2D image;
@@ -82,7 +81,6 @@ void main()
     const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
     const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
     
-    vec4 litColor = texture(primaryRayLitColorTexture, inUV);
     vec4 unlitColor = texture(primaryRayUnlitColorTexture, inUV);
     vec4 normal = texture(primaryRayNormalTexture, inUV);
     float depth = texture(primaryRayDepthTexture, inUV).x;
@@ -105,7 +103,7 @@ void main()
     float tMin     = 0.001;
     float tMax     = 10000.0;
 
-    vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV*20.0);
+    vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV *vec2(1920.0/1024.0, 1080.0/1024.0));
 
     vec4 outColor = vec4(0.0, 0.0, 0.0, 1.0);
     
@@ -113,7 +111,6 @@ void main()
 
     for(uint i = 0; i < globalDrawData.pointLightCount; i++)
     {
-      shadowPayload = 0.0;
       vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
       float distance = length(lightDirection);
       lightDirection = normalize(lightDirection);
@@ -121,14 +118,20 @@ void main()
       
       for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount; s++)
       {
-        vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(s), float(s)) + inUV * 20.0);
+        shadowPayload = 0.0;
         
-        float radius = pointLightBuffer.pointLights[i].radius;
-        float angle = atan(radius/distance);
-        lightDirection = createSampleVector(lightDirection, angle, angle, noise.x - 0.5, noise.y - 0.5);
-
         if(cosTheta > 0)
         {
+          vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(1.0/float(s)));
+        
+          float radius = pointLightBuffer.pointLights[i].radius;
+          float angle = atan(radius, distance);
+          vec3 lightSampleDirection =  normalize(createSampleVector(lightDirection, angle, angle, noise.x - 0.5, noise.y - 0.5));
+
+          vec3 lightNormal = normalize(lightSampleDirection - (dot(lightDirection*distance, lightSampleDirection) * lightDirection*distance));
+          float area = 3*M_PI*pow(radius,2.0);
+          float p = dot(-lightSampleDirection, lightNormal);
+
           traceRayEXT(topLevelAS, // acceleration structure
           shadowRayFlags,       // rayFlags
           0xFF,           // cullMask
@@ -137,7 +140,7 @@ void main()
           1,              // missIndex
           samplePosition.xyz,     // ray origin
           tMin,           // ray min range
-          lightDirection,  // ray direction
+          lightSampleDirection,  // ray direction
           distance,           // ray max range
           0               // payload (location = 0)
           );
@@ -145,16 +148,17 @@ void main()
 
 	        float attenuation = 1.0/(distance*distance);
 
-	        lightDirection = normalize(lightDirection);
+	        vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) ;
 
-	        vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) * shadowPayload;
+          vec3 lightRadiance = lightColor * vec3(pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload * p * area);
 
-	        radiance =  radiance + max(cosTheta, 0.0) * brdf * lightColor * 50.0 * attenuation;
+	        radiance =  radiance +  brdf * lightRadiance;
         }
       }
     }  
 
-   
+    radiance = radiance / float(globalDrawData.pointLightCount);
+
     for(uint i = 0; i < globalDrawData.sunLightCount; i++)
     {
       shadowPayload = 0.0;
@@ -197,14 +201,40 @@ void main()
 
     vec3 priorPosition = cameraData.cameraPosition;
 
-    vec3 glossyIndirectLight = vec3(0.0);
+    vec3 diffuseIndirectLight = vec3(0.0);
 
     
-    //single bounce diffuse indirect light
+    
     for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
     {
-      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV + vec2(1.0/float(i), 1.0/float(i) + screenNoise.xy));
+      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler),  screenNoise.xy + vec2(1.0/float(i)));
       vec3 sampleVector = createSampleVector(normal.xyz, M_PI, M_PI * 0.5, noise.x - 0.5, noise.y - 0.5);
+
+      traceRayEXT(topLevelAS, // acceleration structure
+        rayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        0,              // missIndex
+        samplePosition.xyz,     // ray origin
+        tMin,           // ray min range
+        normal.xyz,  // ray direction
+        tMax,           // ray max range
+        1               // payload (location = 0)
+      );
+      float cosTheta = dot(normal.xyz, sampleVector);
+
+      diffuseIndirectLight = diffuseIndirectLight + ((1.0/M_PI) * unlitColor.xyz * payload.color * cosTheta);
+    }
+    outColor.xyz = outColor.xyz + (diffuseIndirectLight / float(globalDrawData.maxDiffuseSampleCount));
+
+
+    vec3 glossyIndirectLight = vec3(0.0);
+
+    for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
+    {
+      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV + vec2(1.0/float(i), 1.0/float(i) + screenNoise.xy));
+      vec3 sampleVector = createSampleVector(normal.xyz, M_PI * roughness, M_PI * 0.5 * roughness, noise.x - 0.5, noise.y - 0.5);
 
       traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
@@ -220,9 +250,7 @@ void main()
       );
       float cosTheta = dot(normal.xyz, sampleVector);
 
-      glossyIndirectLight = glossyIndirectLight + ((1.0/M_PI) * unlitColor.xyz * payload.color * cosTheta);
+      glossyIndirectLight = glossyIndirectLight;
     }
-    outColor.xyz = outColor.xyz + (glossyIndirectLight / float(globalDrawData.maxDiffuseSampleCount));
-
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }
