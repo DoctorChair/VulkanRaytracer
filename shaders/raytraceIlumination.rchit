@@ -77,13 +77,12 @@ layout(set = 6, binding = 0) uniform texture2D textures[1024];
 struct hitPayload
 {
   bool miss;
-  vec3 color;
-  vec3 normal;
-  vec3 position;
+  vec3 radiance;
+  uint depth;
 };
 
+layout(location = 0) rayPayloadEXT float shadowPayload;
 layout(location = 1) rayPayloadInEXT hitPayload incomigPayload;
-layout(location = 0) rayPayloadEXT float shadowed;
 
 hitAttributeEXT vec2 hitAttribute;
 
@@ -141,93 +140,143 @@ void main()
 	float roughness = roughnessTexture.x;
 	float metallic = metallicTexture.y;
 
+	uint  rayFlags = gl_RayFlagsOpaqueEXT;
 	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
 	
 	float tMin = 0.01;
-	
-	float shadowValue = 0.0;
+	float tMax = 1000.0;
 
 	vec3 radiance = vec3(0.0, 0.0, 0.0);
 
-	incomigPayload.color = vec3(0.0, 0.0, 0.0);
-
-    for(uint i = 0; i < globalDrawData.pointLightCount; i++)
-    {
-		vec3 lightDirection = pointLightBuffer.pointLights[i].position - worldPosition;
-		float range = length(lightDirection);
-		lightDirection = normalize(lightDirection);
-		float cosTheta = dot(lightDirection, normal);
-
-		shadowed = shadowValue;
-		if(cosTheta > 0)
+	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth)
+	{
+		for(uint i = 0; i < globalDrawData.pointLightCount; i++)
 		{
+			shadowPayload = 0.0;
+
+			vec3 lightDirection = pointLightBuffer.pointLights[i].position - worldPosition;
+    	  	float distance = length(lightDirection);
+    	  	lightDirection = normalize(lightDirection);
+    	  	float cosTheta = dot(lightDirection, normal);
+
 			traceRayEXT(topLevelAS, // acceleration structure
-				shadowRayFlags,       // rayFlags
-				0xFF,           // cullMask
-				0,              // sbtRecordOffset
-				0,              // sbtRecordStride
-				1,              // missIndex
-				worldPosition,     // ray origin
-				tMin,           // ray min range
-				lightDirection,  // ray direction
-				range,           // ray max range
-				0               // payload (location = 0)
-			);  
+    	    shadowRayFlags,       // rayFlags
+    	    0xFF,           // cullMask
+    	    0,              // sbtRecordOffset
+    	    0,              // sbtRecordStride
+    	    1,              // missIndex
+    	    worldPosition,     // ray origin
+    	    tMin,           // ray min range
+    	    lightDirection,  // ray direction
+    	    distance,           // ray max range
+    	    0               // payload (location = 0)
+    	    );
 
+			vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
 
-			if(shadowed != shadowValue)
-			{
-				vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
+			float attenuation = 1.0/(distance*distance);
 
-				float attenuation = 1.0/(range*range);
+			vec3 viewDirection = worldPosition - gl_WorldRayOriginEXT;
 
-				lightDirection = normalize(lightDirection);
+		    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
-				vec3 brdf = cookTorranceGgxBRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
-				radiance =  radiance + max(cosTheta, 0.0) * brdf * lightColor * 60.0 * attenuation;				
-			}
-				
-   		}
+			vec3 lightRadiance = lightColor * pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload;
+
+			radiance = radiance + brdf * lightRadiance;
 	}
 
-	float tMax = 1000.0;
-    for(uint i = 0; i < globalDrawData.sunLightCount; i++)
-    {
+	for(uint i = 0; i < globalDrawData.sunLightCount; i++)
+	{
+		shadowPayload = 0.0;
+
 		vec3 lightDirection = sunLightBuffer.sunLights[i].direction;
-		lightDirection = normalize(lightDirection);
 		float cosTheta = dot(lightDirection, normal);
 
-		shadowed = shadowValue;
-		if(cosTheta > 0)
-		{
-			traceRayEXT(topLevelAS, // acceleration structure
-				shadowRayFlags,       // rayFlags
-				0xFF,           // cullMask
-				0,              // sbtRecordOffset
-				0,              // sbtRecordStride
-				1,              // missIndex
-				worldPosition,     // ray origin
-				tMin,           // ray min range
-				lightDirection,  // ray direction
-				tMax,           // ray max range
-				0               // payload (location = 0)
-			);  
+		traceRayEXT(topLevelAS, // acceleration structure
+        shadowRayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        1,              // missIndex
+        worldPosition,     // ray origin
+        tMin,           // ray min range
+        lightDirection,  // ray direction
+        tMax,           // ray max range
+        0               // payload (location = 0)
+        );
 
+		vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
+		
+		vec3 viewDirection = worldPosition - gl_WorldRayOriginEXT;
 
-			if(shadowed != shadowValue)
-			{
-				vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
+	    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
-				lightDirection = normalize(lightDirection);
+		vec3 lightRadiance = lightColor* sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload;
 
-				vec3 brdf = cookTorranceGgxBRDF(-gl_WorldRayDirectionEXT, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
-				radiance =  radiance + max(cosTheta, 0.0) * brdf * 2.0 * lightColor;				
-			}
-				
-   		} 
-    }
+		radiance = radiance + brdf * lightRadiance;
+	}
+		
+	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth+1)
+	{
+	
+	incomigPayload.depth++;
 
-	incomigPayload.color = radiance;
-	incomigPayload.normal = normal; 
-	incomigPayload.position = worldPosition;
+	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), vec2(float(gl_LaunchIDEXT)));
+
+	vec3 diffuseRadiance = vec3(0.0);
+	for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
+	{	
+		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(1.0/float(i)));
+
+		float pdfValue = lambertImportancePDF(noise.x);
+		vec3 sampleDirection = createSampleVector(normal, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
+
+		float cosTheta = dot(sampleDirection, normal);
+
+		traceRayEXT(topLevelAS, // acceleration structure
+        rayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        0,              // missIndex
+        worldPosition,     // ray origin
+        tMin,           // ray min range
+        sampleDirection,  // ray direction
+        tMax,           // ray max range
+        1               // payload (location = 0)
+        );
+
+		diffuseRadiance = diffuseRadiance + colorTexture.xyz * max(cosTheta, 0.0) * incomigPayload.radiance;
+	}
+
+	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount);
+
+	radiance = radiance + diffuseRadiance;
+
+	/* for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
+	{
+		vec3 reflectionDirection = reflect(gl_WorldRayDirectionEXT, normal);
+
+		float cosTheta = dot(reflectionDirection, gl_WorldRayDirectionEXT);
+
+		traceRayEXT(topLevelAS, // acceleration structure
+        rayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        0,              // missIndex
+        worldPosition,     // ray origin
+        tMin,           // ray min range
+        reflectionDirection,  // ray direction
+        tMax,           // ray max range
+        1               // payload (location = 0)
+        );
+	}  */
+	
+	incomigPayload.depth--;
+	}
+	} 
+
+	
+	incomigPayload.radiance = radiance;
 }

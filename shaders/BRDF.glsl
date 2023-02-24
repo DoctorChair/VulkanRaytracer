@@ -79,21 +79,61 @@ vec3 cookTorrancePhongBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal,
 	return  lambert  + specular;
 }
 
+vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, float metallic, float roughness, float reflectance)
+{
+	vec3 halfwayVector = normalize(viewDirection + lightDirection);
+	float alpha = roughness * roughness;
+
+	vec3 r0 = mix(vec3(reflectance), color, metallic);
+
+	float normalDotLightDir = dot(normal, lightDirection);
+	float normalDotView = dot(normal, viewDirection);
+	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0);
+
+	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
+	float geometric = geometricFunction(normalDotView, normalDotLightDir, alpha * 0.5);
+	float ndf = ndfGGX(normalDotHalfway, alpha);
+
+	vec3 specular = ( ndf * fresnel * geometric )
+					/ (4 * max(normalDotLightDir, 0.0001) * max(normalDotView, 0.0001));
+
+	return specular;
+}
+
 vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float maxPhiDeviationAngle, float randomTheta, float randomPhi)
 {
-	vec3 sampleVector;
-
-	vec3 tangent = normalize(vec3(0.0, -originVector.z, originVector.y) * float(originVector.y >= originVector.x) 
-	+ vec3(originVector.z, 0.0, -originVector.x) * float(originVector.x > originVector.y));
 	
-	originVector = normalize(originVector);
-	vec3 bitangnet = cross(originVector, tangent);
-
-	mat3 tbnMatrix = mat3(tangent, bitangnet, originVector);
-
+	vec3 tangent = vec3(originVector.z, 0.0, -originVector.x) * float(abs(originVector.x) > abs(originVector.y))
+				+ vec3(0.0, -originVector.z, originVector.y) * float(abs(originVector.y) > abs(originVector.x));
+	vec3 bitanget = normalize(cross(originVector, tangent));
+	
+	vec3 sampleVector;
 	sampleVector.x = sin(maxThetaDeviationAngle * randomTheta) * cos(maxPhiDeviationAngle * randomPhi);
 	sampleVector.y = cos(maxThetaDeviationAngle * randomTheta);
 	sampleVector.z = sin(maxThetaDeviationAngle * randomTheta) * sin(maxPhiDeviationAngle * randomPhi);
+	
+	mat3 tbn = mat3(tangent, originVector, bitanget);
 
-	return tbnMatrix * normalize(sampleVector.xzy);
+	return tbn *  normalize(originVector);
+}
+
+vec3 createLightSampleVector(vec3 originVector, float radius, float randomTheta, float randomPhi)
+{
+	float r = sqrt(randomTheta);
+	float angle = M_PI * 2.0 * randomPhi;
+	vec2 diskSample = vec2(r * cos(angle), r * sin(angle)) * radius;
+	vec3 tangent = normalize(cross(originVector, vec3(0.0, 1.0, 0.0)));
+	vec3 bitanget = normalize(cross(tangent, originVector));
+	
+	return vec3(originVector + diskSample.x * tangent + diskSample.y * bitanget); 
+}
+
+float lambertImportancePDF(float x)
+{
+	return asin(x);
+}
+
+float ggxImportancePDF(float x, float alpha)
+{
+	return x;
 }

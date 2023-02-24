@@ -1264,7 +1264,7 @@ void Raytracer::initRaytraceShader()
 	
 	uint32_t numSamplers = 10;
 
-	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, 10, numSamplers);
+	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, _maxRecoursionDepth, numSamplers);
 }
 
 void Raytracer::initCompositingShader()

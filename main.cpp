@@ -73,10 +73,10 @@ int main(int argc, char* argv[])
 	loader.freeAssets();
 
 	PointLight point = {};
-	point.diameter = 0.2f;
+	point.diameter = 0.3f;
 	point.position = glm::vec3(0.0f, 2.0f, 0.0f);
 	point.color = glm::vec3(1.0f, 1.0f, 0.9f);
-	point.strength = 10.0f;
+	point.strength = 50.0f;
 
 	PointLight point2 = {};
 	point2.diameter = 0.1f;
@@ -86,7 +86,8 @@ int main(int argc, char* argv[])
 	SunLight sun = {};
 	sun.color = glm::vec3(1.0f , 1.0f, 1.0f);
 	sun.direction = glm::vec3(1.0f, -1.0f, 0.0f);
-	
+	sun.strength = 0.0;
+
 	SpotLight spot = {};
 
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);

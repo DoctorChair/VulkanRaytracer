@@ -168,7 +168,7 @@ struct SunLight
 	glm::vec3 direction;
 	float padding0;
 	glm::vec3 color;
-	float padding1;
+	float strength;
 };
 
 struct PointLight
@@ -257,7 +257,7 @@ private:
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
 
-	uint32_t _concurrencyCount = 1;
+	uint32_t _concurrencyCount = 2;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -270,8 +270,8 @@ private:
 	
 	uint32_t _maxRecoursionDepth = 2;
 	uint32_t _diffuseSampleCount = 1;
-	uint32_t _specularSampleCount = 2;
-	uint32_t _shadowSampleCount = 4;
+	uint32_t _specularSampleCount = 1;
+	uint32_t _shadowSampleCount = 3;
 
 	uint32_t nativeWidth = 1920;
 	uint32_t nativeHeight = 1080;
