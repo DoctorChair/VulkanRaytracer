@@ -87,7 +87,7 @@ void main()
 	float reflectance = 0.04;	
 	float roughness = roughnessMetalness.x;
 	float metallic = roughnessMetalness.y;
-  
+
   vec4 clipSpacePosition = vec4(inUV * 2.0 - 1.0, depth, 1.0);
   vec4 viewSpacePosition = cameraData.inverseProjectionMatrix * clipSpacePosition;
   viewSpacePosition = viewSpacePosition / viewSpacePosition.w;
@@ -117,7 +117,7 @@ void main()
       
       float radius = pointLightBuffer.pointLights[i].radius;
       float angle = atan(radius / distance);
-      vec3 lightSampleDirection =  normalize(createLightSampleVector(lightDirection, radius, noise.x ,noise.y));
+      vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x ,noise.y));
       
       vec3 lightNormal = normalize(lightSampleDirection - (dot(lightDirection*distance, lightSampleDirection) * lightDirection * distance));
       float area = 3*M_PI*pow(radius, 2.0);

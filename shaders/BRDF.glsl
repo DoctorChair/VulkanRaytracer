@@ -22,9 +22,9 @@ float geometricFunction(float normalDotView, float normalDotLightDir, float k)
 	return schlickGGX(normalDotView, k) * schlickGGX(normalDotLightDir, k); 
 }
 
-vec3 fresnelSchlick(vec3 r0, float cosTheata)
+vec3 fresnelSchlick(vec3 r0, float cosTheta)
 {
-	return mix(r0, vec3(1.0f), pow((1.0 - cosTheata), 5.0));
+	return r0 + (1.0f - r0) * pow(1.0 - cosTheta, 5.0);
 }
 
 vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, float metallic, float roughness, float reflectance)
@@ -114,7 +114,7 @@ vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float m
 	
 	mat3 tbn = mat3(tangent, originVector, bitanget);
 
-	return tbn *  normalize(originVector);
+	return tbn *  normalize(sampleVector);
 }
 
 vec3 createLightSampleVector(vec3 originVector, float radius, float randomTheta, float randomPhi)
@@ -135,5 +135,5 @@ float lambertImportancePDF(float x)
 
 float ggxImportancePDF(float x, float alpha)
 {
-	return x;
+	return atan((alpha * sqrt(x)) / sqrt(1.0 -x));
 }

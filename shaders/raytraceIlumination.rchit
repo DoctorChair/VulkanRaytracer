@@ -251,7 +251,7 @@ void main()
 
 	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount);
 
-	radiance = radiance + diffuseRadiance;
+	
 
 	/* for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
 	{
@@ -272,8 +272,12 @@ void main()
         1               // payload (location = 0)
         );
 	}  */
-	
+
+
 	incomigPayload.depth--;
+
+	radiance = radiance + diffuseRadiance;
+
 	}
 	} 
 
