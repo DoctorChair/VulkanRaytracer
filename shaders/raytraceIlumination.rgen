@@ -26,6 +26,8 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
   uint maxSpecularSampleCount;
   uint maxShadowRaySampleCount;
   uint noiseSampleTextureIndex;
+  uint sampleSequenceLength;
+  uint frameNumber;
 } globalDrawData;
 
 
@@ -34,21 +36,22 @@ layout(set = 1, binding = 1) uniform sampler2D primaryRayNormalTexture;
 layout(set = 1, binding = 2) uniform sampler2D primaryRayDepthTexture;
 layout(set = 1, binding = 3) uniform sampler2D primaryRayRoughnessMetalicTexture;
 
+
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 2, binding = 1, rgba32f) uniform image2D image;
+layout(std430, set = 2, binding = 4) readonly buffer sampleSequenceBuffer{
+  vec2 samples[];
+} sampleSequence;
 
 layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
-
 	SunLight sunLights[];
 } sunLightBuffer;
 
 layout(std430, set = 3, binding = 1) readonly buffer PointBuffer{
-
 	PointLight pointLights[];
 } pointLightBuffer;
 
 layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
-
 	SpotLight spotLights[];
 } spotLightBuffer; 
 
@@ -174,7 +177,9 @@ void main()
   
   for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
   {
-    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(1.0/float(i)));
+    uint index = ( globalDrawData.frameNumber + i) % globalDrawData.sampleSequenceLength;
+    vec2 noise = sampleSequence.samples[index];
+    
     float pdfValue = lambertImportancePDF(noise.x);
     vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
     float cosTheta = dot(sampleDirection, normal.xyz);
@@ -198,14 +203,15 @@ void main()
 
   for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
 	{
-    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(1.0/float(i)));
+    uint index = (globalDrawData.frameNumber + i + 1) % globalDrawData.sampleSequenceLength;
+    vec2 noise = sampleSequence.samples[index];
 
     float pdfValue = ggxImportancePDF(noise.x, roughness);
-    vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
+    vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, noise.x, noise.y);
 
-    vec3 reflectionDirection = reflect(-viewDirection, halfwayVector);
+    vec3 reflectionDirection = reflect(-viewDirection, normal.xyz);
 
-		float cosTheta = dot(reflectionDirection, normal.xyz);
+		float cosTheta = max(dot(reflectionDirection, normal.xyz), 0.0f);
 
 		traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
@@ -222,11 +228,14 @@ void main()
 
     vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance); 
 
-    vec3 specularRadiance = specularRadiance + (brdf * cosTheta * payload.radiance) / pdfValue;
+    specularRadiance = specularRadiance + ( brdf * payload.radiance * cosTheta)  / pdfValue;
+    specularRadiance = payload.radiance;
 	} 
-  specularRadiance = specularRadiance/float(globalDrawData.maxDiffuseSampleCount);
+  specularRadiance = specularRadiance/float(globalDrawData.maxSpecularSampleCount);
 	
-  outColor.xyz = specularRadiance + diffuseRadiance + radiance;
-        
+  outColor.xyz = radiance ;
+  outColor.xyz = outColor.xyz + specularRadiance;
+  //outColor.xyz = outColor.xyz + diffuseRadiance;      
+
   imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

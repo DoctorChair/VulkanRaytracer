@@ -1,12 +1,11 @@
 #version 460
 
-layout (location = 0) in vec3 vertexPos;
-layout (location = 1) in vec3 normal;
-layout (location = 2) in vec3 tangent;
-layout (location = 3) in vec2 TexCoords0;
-layout (location = 4) in vec2 TexCoords1;
-layout (location = 5) in vec2 TexCoords2;
-layout (location = 6) in vec2 TexCoords3;
+layout (location = 0) in vec4 vertexPos;
+layout (location = 1) in vec4 normal;
+layout (location = 2) in vec4 tangent;
+layout (location = 3) in vec4 TexCoordPair;
+
+
 
 //output variable to the fragment shader
 layout (location = 0) out vec4 outPosition;
@@ -67,8 +66,8 @@ void main()
 
 	mat3 normalMatrix = transpose(inverse(mat3(model)));
 
-	vec3 worldTangent =  normalize(normalMatrix * normalize(tangent));
-	vec3 worldNormal = normalize(normalMatrix * normalize(normal));
+	vec3 worldTangent =  normalize(normalMatrix * normalize(tangent.xyz));
+	vec3 worldNormal = normalize(normalMatrix * normalize(normal.xyz));
 	worldTangent = normalize(worldTangent - dot(worldTangent, worldNormal) * worldNormal);
 	vec3 worldBitagnent =  normalize(cross(worldNormal, worldTangent));
 
@@ -81,11 +80,9 @@ void main()
 	metallicIndex = drawData.instanceData[gl_InstanceIndex].material.metallicIndex;
 	roughnessIndex = drawData.instanceData[gl_InstanceIndex].material.roughnessIndex;
 
-	outTexCoords0 = TexCoords0;
-	outTexCoords1 = TexCoords1;
-	outTexCoords2 = TexCoords2;
-	outTexCoords3 = TexCoords3;
+	outTexCoords0 = TexCoordPair.xy;
+	outTexCoords1 = TexCoordPair.zw;
 	
-	outPosition = model * vec4(vertexPos, 1.0f);
+	outPosition = model * vec4(vertexPos);
 	gl_Position = projection * view * outPosition;
 }

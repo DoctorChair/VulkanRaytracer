@@ -70,6 +70,12 @@ struct RaytraceBuffer
 	VkImageView colorView;
 };
 
+struct MeshBufferAddressData
+{
+	VkDeviceAddress vertexAddress = 0;
+	VkDeviceAddress instanceAddress = 0;
+};
+
 struct MeshBuffer
 {
 	VGM::Buffer vertices;
@@ -117,7 +123,9 @@ struct DrawData
 	glm::mat4 modelMatrix;
 	Material material;
 	uint32_t ID;
-	uint32_t padding[3];
+	uint32_t vertexOffset;
+	uint32_t indicesOffset;
+	uint32_t padding;
 };
 
 struct Model
@@ -136,6 +144,8 @@ struct GlobalRenderData
 	uint32_t maxSpecularSampleCount;
 	uint32_t maxShadowRaySampleCount;
 	uint32_t noiseSampleTextureIndex;
+	uint32_t sampleSequenceLength;
+	uint32_t frameNumber;
 };
 
 struct CameraData
@@ -248,6 +258,9 @@ private:
 	void executeRaytracePass();
 	void executeCompositPass();
 
+	float genHaltonSample(uint32_t base, uint32_t index);
+	void genHaltonSequence(uint32_t a, uint32_t b, uint32_t length);
+
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
 	VGM::VulkanContext _vulkan;
@@ -257,7 +270,7 @@ private:
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
 
-	uint32_t _concurrencyCount = 2;
+	uint32_t _concurrencyCount = 1;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -271,10 +284,13 @@ private:
 	uint32_t _maxRecoursionDepth = 2;
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
-	uint32_t _shadowSampleCount = 3;
+	uint32_t _shadowSampleCount = 4;
+	uint32_t _sampleSequenceLength = 256;
 
-	uint32_t nativeWidth = 1920;
-	uint32_t nativeHeight = 1080;
+	uint32_t nativeWidth = 1920/2;
+	uint32_t nativeHeight = 1080/2;
+
+	uint32_t _frameNumber = 0;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;
@@ -332,7 +348,7 @@ private:
 	
 	std::vector<VGM::Buffer> _instanceIndexBuffers;
 	std::vector<VGM::Buffer> _instanceIndexTransferBuffers;
-
+	VGM::Buffer _sampleSequenceBuffer;
 
 	std::vector<VGM::Buffer> _sunLightBuffers;
 	std::vector<VGM::Buffer> _pointLightBuffers;

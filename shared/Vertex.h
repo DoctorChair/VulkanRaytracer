@@ -3,8 +3,8 @@
 
 struct Vertex 
 {
-	glm::vec3 position;
-	glm::vec3 normal;
-	glm::vec3 tangent;
-	glm::vec2 texCoord[4];
+	glm::vec4 position;
+	glm::vec4 normal;
+	glm::vec4 tangent;
+	glm::vec4 texCoordPair;
 };

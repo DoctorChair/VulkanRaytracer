@@ -35,15 +35,14 @@ struct drawInstanceData
 	mat4 modelMatrix;
 	Material material;
 	uint ID;
+	uint vertexOffset;
+	uint indicesOffset;
 };
 
 struct Vertex
 {
-	vec3 position;
-	vec3 normal;
-	vec3 tangent;
-	vec2 texCoord0;
-	vec2 texCoord1;
-	vec2 texCoord2;
-	vec2 texCoord3;
+	vec4 position;
+	vec4 normal;
+	vec4 tangent;
+	vec4 texCoordPair;
 };

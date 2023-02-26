@@ -22,8 +22,8 @@ void main()
 	ivec2 pixCoord = ivec2((texCoord*PushConstants.nativeResolution));
    
     vec4 hdrColor = imageLoad(image, pixCoord);
-    vec4 mapped = vec4(1.0) - exp(-hdrColor * exposure);
-    mapped = pow(mapped, vec4(1.0 / gamma));
+    /* vec4 mapped = vec4(1.0) - exp(-hdrColor * exposure);
+    mapped = pow(mapped, vec4(1.0 / gamma)); */
 	
 
     hdrColor.w = 1.0;

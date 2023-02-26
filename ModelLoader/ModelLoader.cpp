@@ -112,13 +112,14 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 		vertex.position.x = mesh->mVertices[i].x;
 		vertex.position.y = mesh->mVertices[i].y;
 		vertex.position.z = mesh->mVertices[i].z;
+		vertex.position.w = 1.0f;
 
-		for (unsigned int j = 0; j < 4; j++)
+		for (unsigned int j = 0; j < 1; j++)
 		{
 			if (mesh->HasTextureCoords(j))
 			{
-				vertex.texCoord[j].x = mesh->mTextureCoords[j][i].x;
-				vertex.texCoord[j].y = mesh->mTextureCoords[j][i].y;
+				vertex.texCoordPair.x = mesh->mTextureCoords[j][i].x;
+				vertex.texCoordPair.y = mesh->mTextureCoords[j][i].y;
 			}
 		}
 		if (mesh->HasTangentsAndBitangents())

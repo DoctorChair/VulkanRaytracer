@@ -48,7 +48,7 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 
 		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME},
+		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, "VK_EXT_depth_range_unrestricted"},
 		&features2, _concurrencyCount);
 
 	_windowWidth = w;
@@ -73,6 +73,8 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 	initCommandBuffers();
 	initDataBuffers();
 	initLightBuffers();
+
+	genHaltonSequence(2, 3, _sampleSequenceLength);
 
 	initgBuffers();
 	//initDefferedBuffers();
@@ -352,7 +354,7 @@ void Raytracer::drawMeshInstance(MeshInstance meshInstance, glm::mat4 transform)
 	command.firstInstance = static_cast<uint32_t>(_drawCommandTransferCache.size());
 
 	_drawCommandTransferCache.push_back(command);
-	_drawDataTransferCache.push_back({ transform, material , 0 });
+	_drawDataTransferCache.push_back({ transform, material , 0, mesh.vertexOffset, mesh.indexOffset });
 
 	transform = glm::transpose(transform);
 
@@ -463,21 +465,13 @@ void Raytracer::initMeshBuffer()
 		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 		VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, _maxTriangleCount * sizeof(uint32_t), _vulkan._meshAllocator, _vulkan._device);
 	
-	VkDeviceSize alignment = _vulkan._phyiscalDeviceProperties.limits.minStorageBufferOffsetAlignment;
-
-	VkDeviceSize alignedSize = sizeof(VkDeviceAddress);
-	VkDeviceSize r = alignedSize % alignment;
-
-	alignedSize = (r == 0) ? alignedSize : alignedSize + (alignment - r);
-
 	_meshBuffer.addressBuffer = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		2 * alignedSize, _vulkan._meshAllocator, _vulkan._device);
+		sizeof(MeshBufferAddressData), _vulkan._meshAllocator, _vulkan._device);
 
-	VkDeviceAddress addresses[2] = {_meshBuffer.vertices.getDeviceAddress(_vulkan._device), _meshBuffer.indices.getDeviceAddress(_vulkan._device)};
+	MeshBufferAddressData addressData = { _meshBuffer.vertices.getDeviceAddress(_vulkan._device), _meshBuffer.indices.getDeviceAddress(_vulkan._device)};
 
 	uint8_t* ptr = reinterpret_cast<uint8_t*>(_meshBuffer.addressBuffer.map(_vulkan._meshAllocator));
-	_meshBuffer.addressBuffer.memcopy(ptr, &addresses[0], sizeof(VkDeviceAddress));
-	_meshBuffer.addressBuffer.memcopy(ptr + alignedSize, &addresses[1], sizeof(VkDeviceAddress));
+	_meshBuffer.addressBuffer.memcopy(ptr, &addressData, sizeof(addressData));
 	_meshBuffer.addressBuffer.unmap(_vulkan._meshAllocator);
 }
 
@@ -496,15 +490,15 @@ void Raytracer::initShaderBindingTable()
 void Raytracer::loadPlaceholderMeshAndTexture()
 {
 	Vertex vertex0, vertex1, vertex2;
-	vertex0.position = { -1.0f, -1.0f, 0.0f };
-	vertex1.position = { -0.0f, -1.0f, 0.0f };
-	vertex2.position = { 0.0f, 1.0f, 0.0f };
+	vertex0.position = { -1.0f, -1.0f, 0.0f, 1.0f};
+	vertex1.position = { -0.0f, -1.0f, 0.0f, 1.0f };
+	vertex2.position = { 0.0f, 1.0f, 0.0f, 1.0f };
 	std::vector<Vertex> vertices = {vertex0, vertex1, vertex2};
 	std::vector<uint32_t> indices = { 0, 1, 2 };
 	std::vector<unsigned char> pixels(128 * 128 * 4, 0);
-	uint32_t index = loadTexture(pixels, 128, 128, 4, "dummy");
+	uint32_t index = loadTexture(pixels, 128, 128, 4, "placeHolderTexture");
 
-	_dummyMesh = loadMesh(vertices, indices, "dummy");
+	_dummyMesh = loadMesh(vertices, indices, "placeHolderMesh");
 	_dummyMesh.material.albedoIndex = index;
 	_dummyMesh.material.normalIndex = index;
 	_dummyMesh.material.metallicIndex = index;
@@ -629,15 +623,25 @@ void Raytracer::updateRaytraceDescripotrSets()
 	accelWrite.pAccelerationStructures = _accelerationStructure.topLevelAccelStructures[_currentFrameIndex].get();
 	accelWrite.accelerationStructureCount = 1;
 	
+	VkDescriptorBufferInfo addressInfo = {};
+	addressInfo.buffer = _meshBuffer.addressBuffer.get();
+	addressInfo.offset = 0;
+	addressInfo.range = sizeof(MeshBufferAddressData);
+
+	VkDescriptorBufferInfo sampleSequenceInfo = {};
+	sampleSequenceInfo.buffer = _sampleSequenceBuffer.get();
+	sampleSequenceInfo.offset = 0;
+	sampleSequenceInfo.range = VK_WHOLE_SIZE;
+
 	VkDescriptorBufferInfo vertexInfo = {};
-	vertexInfo.buffer = _meshBuffer.addressBuffer.get();
+	vertexInfo.buffer = _meshBuffer.vertices.get();
 	vertexInfo.offset = 0;
-	vertexInfo.range = sizeof(VkDeviceAddress);
+	vertexInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorBufferInfo indexInfo = {};
-	indexInfo.buffer = _meshBuffer.addressBuffer.get();
-	indexInfo.offset = 16;
-	indexInfo.range = sizeof(VkDeviceAddress);
+	indexInfo.buffer = _meshBuffer.indices.get();
+	indexInfo.offset = 0;
+	indexInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorSet sets[] = { _raytracer1DescriptorSets[_currentFrameIndex], _raytracer2DescriptorSets[_currentFrameIndex] };
 	VGM::DescriptorSetUpdater::begin(sets)
@@ -647,8 +651,10 @@ void Raytracer::updateRaytraceDescripotrSets()
 		.bindImage(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &roughnessMetalnessInfo, nullptr, 1, 0, 3)
 		.bindAccelerationStructure(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, &accelWrite, 1, 1, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &outColorInfo, nullptr, 1, 1, 1)
-		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vertexInfo, 1, 1, 2)
-		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, indexInfo, 1, 1, 3)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, addressInfo, 1, 1, 2)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, sampleSequenceInfo, 1, 1, 4)
+		/*.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, vertexInfo, 1, 1, 5)
+		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, indexInfo, 1, 1, 6)*/
 		.updateDescriptorSet(_vulkan._device);
 }
 
@@ -703,6 +709,8 @@ void Raytracer::executeDefferedPass()
 	_spotLightBuffers[_currentFrameIndex].uploadData(_spotLightTransferCache.data(),
 		_spotLightTransferCache.size() * sizeof(SpotLight), _vulkan._generalPurposeAllocator);
 
+	_frameNumber++;
+
 	_globalRenderData.sunLightCount = static_cast<uint32_t>(_sunLightTransferCache.size());
 	_globalRenderData.pointLightCount = static_cast<uint32_t>(_pointLightTransferCache.size());
 	_globalRenderData.spotLightCount = static_cast<uint32_t>(_spotLightTransferCache.size());
@@ -710,6 +718,8 @@ void Raytracer::executeDefferedPass()
 	_globalRenderData.maxDiffuseSampleCount = _diffuseSampleCount;
 	_globalRenderData.maxSpecularSampleCount = _specularSampleCount;
 	_globalRenderData.maxShadowRaySampleCount = _shadowSampleCount;
+	_globalRenderData.sampleSequenceLength = _sampleSequenceLength;
+	_globalRenderData.frameNumber = _frameNumber;
 
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&_globalRenderData, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
@@ -947,6 +957,39 @@ void Raytracer::executeCompositPass()
 
 }
 
+void Raytracer::genHaltonSequence(uint32_t a, uint32_t b, uint32_t length)
+{
+	std::vector<glm::vec2> samples;
+	samples.resize(length);
+	for(unsigned int i = 0; i<length; i++)
+	{
+		glm::vec2 sample = { genHaltonSample(a, i + 10), genHaltonSample(b, i + 10) };
+		samples[i] = sample;
+	}
+
+	_sampleSequenceBuffer = VGM::Buffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT, length * sizeof(glm::vec2),
+		_vulkan._generalPurposeAllocator, _vulkan._device);
+
+	void* ptr = _sampleSequenceBuffer.map(_vulkan._generalPurposeAllocator);
+	_sampleSequenceBuffer.memcopy(ptr, samples.data(), samples.size() * sizeof(glm::vec2));
+	_sampleSequenceBuffer.unmap(_vulkan._generalPurposeAllocator);
+}
+
+float Raytracer::genHaltonSample(uint32_t base, uint32_t index)
+{
+	float f = 1;
+	float r = 0;
+
+	while(index > 0)
+	{
+		f = f / static_cast<float>(base);
+		r = r + f * (index % base);
+		index = std::floor(static_cast<float>(index) / static_cast<float>(base));
+	}
+
+	return r;
+}
+
 void Raytracer::initgBuffers()
 {
 	_gBufferChain.resize(_concurrencyCount);
@@ -1091,7 +1134,9 @@ void Raytracer::initDescriptorSetLayouts()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1)
 		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
-		.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		/*.addBinding(5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)*/
 		.createDescriptorSetLayout(_vulkan._device, &_raytracerLayout2);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1187,13 +1232,10 @@ void Raytracer::initGBufferShader()
 	configurator.setDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
 	
 
-	configurator.addVertexAttribInputDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0); //Position
-	configurator.addVertexAttribInputDescription(1, 0, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float)); //texCoord
-	configurator.addVertexAttribInputDescription(2, 0, VK_FORMAT_R32G32B32_SFLOAT, 6 * sizeof(float)); //texCoord
-	configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32B32_SFLOAT, 9 * sizeof(float)); //texCoord
-	configurator.addVertexAttribInputDescription(4, 0, VK_FORMAT_R32G32B32_SFLOAT, 11 * sizeof(float)); //texCoord
-	configurator.addVertexAttribInputDescription(5, 0, VK_FORMAT_R32G32B32_SFLOAT, 13 * sizeof(float)); //normal
-	configurator.addVertexAttribInputDescription(6, 0, VK_FORMAT_R32G32B32_SFLOAT, 15 * sizeof(float)); //tangent
+	configurator.addVertexAttribInputDescription(0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0); //Position
+	configurator.addVertexAttribInputDescription(1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 4 * sizeof(float)); //normal
+	configurator.addVertexAttribInputDescription(2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 8 * sizeof(float)); //tangent
+	configurator.addVertexAttribInputDescription(3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 12 * sizeof(float)); //texcoord
 	configurator.addVertexInputInputBindingDescription(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX);
 
 	uint32_t numSamplers = 10;
