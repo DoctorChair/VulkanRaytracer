@@ -42,10 +42,10 @@ struct GBuffer
 {
 	VGM::Framebuffer framebuffer;
 
-	VGM::Texture positionBuffer;
-	VkImageView positionView;
 	VGM::Texture colorBuffer;
 	VkImageView colorView;
+	VGM::Texture positionBuffer;
+	VkImageView positionView;
 	VGM::Texture normalBuffer;
 	VkImageView normalView;
 	VGM::Texture idBuffer;
@@ -68,6 +68,20 @@ struct RaytraceBuffer
 {
 	VGM::Texture colorBuffer;
 	VkImageView colorView;
+};
+
+struct HistoryBuffer
+{
+	std::vector<VGM::Texture> velocityHistoryBuffer;
+	std::vector<VkImageView> velocityViews;
+
+	std::vector<VGM::Texture> idHistoryBuffer;
+	std::vector<VkImageView> idViews;
+
+	VGM::Texture priorPositionBuffer;
+	VkImageView priorPositionView;
+
+	uint32_t currentIndex = 0;
 };
 
 struct MeshBufferAddressData
@@ -146,6 +160,7 @@ struct GlobalRenderData
 	uint32_t noiseSampleTextureIndex;
 	uint32_t sampleSequenceLength;
 	uint32_t frameNumber;
+	uint32_t historyLength;
 };
 
 struct CameraData
@@ -243,6 +258,7 @@ private:
 	void initgBuffers();
 	void initDefferedBuffers();
 	void initRaytraceBuffers();
+	void initHistoryBuffers();
 	void initPresentFramebuffers();
 	void initTextureArrays();
 	void initShaderBindingTable();
@@ -252,7 +268,11 @@ private:
 	void updateGBufferDescriptorSets();
 	void updateDefferedDescriptorSets();
 	void updateRaytraceDescripotrSets();
+
 	void updateCompositingDescriptorSets();
+
+	void updateGBufferFramebufferBindings();
+	void updateCompositingFramebufferBindings();
 
 	void executeDefferedPass();
 	void executeRaytracePass();
@@ -270,7 +290,7 @@ private:
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
 
-	uint32_t _concurrencyCount = 1;
+	uint32_t _concurrencyCount = 2;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -285,7 +305,8 @@ private:
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 4;
-	uint32_t _sampleSequenceLength = 256;
+	uint32_t _sampleSequenceLength = 8;
+	uint32_t _historyLength = 1;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;
@@ -321,9 +342,11 @@ private:
 	VkPipelineLayout _compositingPipelineLayout;
 	std::vector<VGM::Framebuffer> _presentFramebuffers;
 
+	HistoryBuffer _historyBuffer;
+
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 
-	uint32_t _currentFrameIndex = 0;
+	uint32_t _currentFrameIndex = 1;
 	uint32_t _currentSwapchainIndex = 0;
 
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;

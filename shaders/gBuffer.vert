@@ -1,11 +1,13 @@
 #version 460
+#extension GL_GOOGLE_include_directive : enable
+
+#include "BRDF.glsl"
+#include "common.glsl"
 
 layout (location = 0) in vec4 vertexPos;
 layout (location = 1) in vec4 normal;
 layout (location = 2) in vec4 tangent;
 layout (location = 3) in vec4 TexCoordPair;
-
-
 
 //output variable to the fragment shader
 layout (location = 0) out vec4 outPosition;
@@ -13,13 +15,12 @@ layout (location = 1) out vec2 outTexCoords0;
 layout (location = 2) out vec2 outTexCoords1;
 layout (location = 3) out vec2 outTexCoords2;
 layout (location = 4) out vec2 outTexCoords3;
-layout (location = 5) out flat uint albedoIndex;
-layout (location = 6) out flat uint normalIndex;
-layout (location = 7) out flat uint metallicIndex;
-layout (location = 8) out flat uint roughnessIndex;
-layout (location = 9) out vec3 T;
-layout (location = 10) out vec3 B;
-layout (location = 11) out vec3 N;
+layout (location = 5) out flat uint instanceIndex;
+layout (location = 6) out vec3 T;
+layout (location = 7) out vec3 B;
+layout (location = 8) out vec3 N;
+layout (location = 9) out flat uint ID;
+
 
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
@@ -38,21 +39,6 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint maxRecoursionDepth;
 } globalDrawData;
 
-
-struct Material
-{
-	uint albedoIndex;
-	uint metallicIndex;
-	uint normalIndex;
-	uint roughnessIndex;	
-};
-
-struct drawInstanceData
-{
-	mat4 modelMatrix;
-	Material material;
-	uint ID;
-};
 
 layout(std430, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 	drawInstanceData instanceData[];
@@ -75,14 +61,14 @@ void main()
 	B = worldBitagnent;
 	N = worldNormal;
 
-	albedoIndex = drawData.instanceData[gl_InstanceIndex].material.albedoIndex;
-	normalIndex = drawData.instanceData[gl_InstanceIndex].material.normalIndex;
-	metallicIndex = drawData.instanceData[gl_InstanceIndex].material.metallicIndex;
-	roughnessIndex = drawData.instanceData[gl_InstanceIndex].material.roughnessIndex;
+	instanceIndex = gl_InstanceIndex;
 
 	outTexCoords0 = TexCoordPair.xy;
 	outTexCoords1 = TexCoordPair.zw;
 	
 	outPosition = model * vec4(vertexPos);
-	gl_Position = projection * view * outPosition;
+	gl_Position = projection * view * outPosition;;
+
+
+	ID = drawData.instanceData[gl_InstanceIndex].ID;
 }

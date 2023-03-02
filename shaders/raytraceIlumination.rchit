@@ -114,7 +114,7 @@ void main()
 	Vertex v1;
 	Vertex v2;
 	
-drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT];
+	drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT];
 
 	Vertices vertices = Vertices(meshBufferAddresses.vertexAddress);
 	Indices indices = Indices(meshBufferAddresses.instanceAddress);
@@ -172,6 +172,9 @@ drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT]
     	  	float distance = length(lightDirection);
     	  	lightDirection = normalize(lightDirection);
     	  	float cosTheta = dot(lightDirection, normal);
+			
+			float radius = pointLightBuffer.pointLights[i].radius;
+			float area = 3*M_PI*pow(radius, 2.0);
 
 			traceRayEXT(topLevelAS, // acceleration structure
     	    shadowRayFlags,       // rayFlags
@@ -194,7 +197,7 @@ drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT]
 
 		    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
-			vec3 lightRadiance = lightColor * pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload;
+			vec3 lightRadiance = lightColor * pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload * area;
 
 			radiance = radiance + brdf * lightRadiance;
 	}
@@ -229,24 +232,24 @@ drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT]
 
 		radiance = radiance + brdf * lightRadiance;
 	}
-		
+	
+	
+
 	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth+1)
 	{
-	
+	vec3 diffuseRadiance = vec3(0.0);
+
 	incomigPayload.depth++;
 
 	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), vec2(float(gl_LaunchIDEXT)));
-
-
-	/* vec3 diffuseRadiance = vec3(0.0);
+	
 	for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
 	{	
-		uint index = (globalDrawData.frameNumber + i) % globalDrawData.sampleSequenceLength;
+		uint index = i % globalDrawData.sampleSequenceLength;
     	vec2 noise = sampleSequence.samples[index];
     
     	float pdfValue = lambertImportancePDF(noise.x);
     	vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
-		
 
 		float cosTheta = dot(sampleDirection, normal);
 
@@ -266,11 +269,11 @@ drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT]
 		diffuseRadiance = diffuseRadiance + colorTexture.xyz * max(cosTheta, 0.0) * incomigPayload.radiance / pdfValue;
 	}
 
-	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount); */
+	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount);
 
 	
 
-	/* for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
+	for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
 	{
 		vec3 reflectionDirection = reflect(gl_WorldRayDirectionEXT, normal);
 
@@ -288,12 +291,12 @@ drawInstanceData instanceData = drawData.instanceData[gl_InstanceCustomIndexEXT]
         tMax,           // ray max range
         1               // payload (location = 0)
         );
-	}  */
+	} 
 
 
 	incomigPayload.depth--;
 
-	//radiance = radiance + diffuseRadiance; 
+	radiance = radiance + diffuseRadiance; 
 
 	}
 	} 
