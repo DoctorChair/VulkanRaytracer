@@ -14,7 +14,7 @@ layout (location = 6) in vec3 T;
 layout (location = 7) in vec3 B;
 layout (location = 8) in vec3 N;
 layout (location = 9) in flat uint ID;
-
+layout (location = 10) in vec4 previousPosition;
 
 //output write
 layout (location = 0) out vec4 outColor;
@@ -30,6 +30,8 @@ layout(set = 0, binding = 0) uniform  CameraBuffer{
     mat4 projectionMatrix;
     mat4 inverseProjectionMatrix;
 	vec3 cameraPosition;
+	mat4 previousProjectionMatrix;
+	mat4 previousViewMatrix;
 } cameraData;
 
 layout(set = 1, binding = 0) uniform sampler albedoSampler;
@@ -77,14 +79,15 @@ void main()
 
 	outPosition = position;
 	
-	mat4 pvMatrix = cameraData.projectionMatrix * cameraData.viewMatrix;
-
-	vec4 p = pvMatrix * position;
+	vec4 projectionSpacePositon = cameraData.projectionMatrix * cameraData.viewMatrix * position;
+	vec4 previousProjectionSpacePositon = cameraData.previousProjectionMatrix * cameraData.previousViewMatrix * previousPosition;
 
 	vec2 uv =  vec2((float(gl_FragCoord.x)) / 960.0, (float(gl_FragCoord.y)) / 540.0);
-	vec4 previousPosition = pvMatrix * texture(priorPosition, uv);
-	vec2 previous = vec2(previousPosition.xy / previousPosition.w); //* 0.5 + 0.5;
-	vec2 current = vec2(p.xy / p.w);// * 0.5 + 0.5;
+	vec4 previousPosition = cameraData.previousProjectionMatrix * cameraData.previousViewMatrix * texture(priorPosition, uv);
+	
+	vec2 previous = vec2(previousProjectionSpacePositon.xy / previousProjectionSpacePositon.w) * 0.5 + 0.5;
+	vec2 current = vec2(projectionSpacePositon.xy / projectionSpacePositon.w) * 0.5 + 0.5;
+	
 	outVelocity = vec4(current - previous, 0.0, 1.0);
 	
 }

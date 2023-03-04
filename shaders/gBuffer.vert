@@ -20,7 +20,7 @@ layout (location = 6) out vec3 T;
 layout (location = 7) out vec3 B;
 layout (location = 8) out vec3 N;
 layout (location = 9) out flat uint ID;
-
+layout (location = 10) out vec4 outPreviousPosition;
 
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
@@ -47,6 +47,7 @@ layout(std430, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 void main()
 {
 	mat4 model = drawData.instanceData[gl_InstanceIndex].modelMatrix;
+	mat4 previousModel = drawData.instanceData[gl_InstanceIndex].previousModelMatrix;
 	mat4 view = cameraData.viewMatrix;
 	mat4 projection = cameraData.projectionMatrix;
 
@@ -67,7 +68,8 @@ void main()
 	outTexCoords1 = TexCoordPair.zw;
 	
 	outPosition = model * vec4(vertexPos);
-	gl_Position = projection * view * outPosition;;
+	outPreviousPosition = previousModel * vec4(vertexPos);
+	gl_Position = projection * view * outPosition;
 
 
 	ID = drawData.instanceData[gl_InstanceIndex].ID;

@@ -75,6 +75,11 @@ struct HistoryBuffer
 	std::vector<VGM::Texture> velocityHistoryBuffer;
 	std::vector<VkImageView> velocityViews;
 
+	VGM::Texture radianceHistory;
+	VkImageView radianceView;
+
+
+
 	std::vector<VGM::Texture> idHistoryBuffer;
 	std::vector<VkImageView> idViews;
 
@@ -130,11 +135,13 @@ struct MeshInstance
 	Material material;
 	uint32_t instanceID;
 	glm::mat4 transform = glm::mat4(1.0f);
+	glm::mat4 previousTransform = glm::mat4(1.0f);
 };
 
 struct DrawData
 {
-	glm::mat4 modelMatrix;
+	glm::mat4 modelMatrix = glm::mat4(1.0f);
+	glm::mat4 previousModelMatrix = glm::mat4(1.0f);
 	Material material;
 	uint32_t ID;
 	uint32_t vertexOffset;
@@ -161,6 +168,9 @@ struct GlobalRenderData
 	uint32_t sampleSequenceLength;
 	uint32_t frameNumber;
 	uint32_t historyLength;
+	uint32_t historyIndex;
+	uint32_t nativeResolutionWidth;
+	uint32_t nativeResolutionHeight;
 };
 
 struct CameraData
@@ -170,6 +180,9 @@ struct CameraData
 	glm::mat4 projectionMatrix;
 	glm::mat4 inverseProjectionMatrix;
 	glm::vec3 cameraPosition;
+	float padding;
+	glm::mat4 previousProjectionMatrix = glm::mat4(1.0f);
+	glm::mat4 previousViewMatrix = glm::mat4(1.0f);
 };
 
 struct FrameSynchro
@@ -306,7 +319,7 @@ private:
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 4;
 	uint32_t _sampleSequenceLength = 8;
-	uint32_t _historyLength = 1;
+	uint32_t _historyLength = 8;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;

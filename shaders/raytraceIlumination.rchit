@@ -302,5 +302,5 @@ void main()
 	} 
 
 	
-	incomigPayload.radiance = radiance;
+	incomigPayload.radiance = radiance / 2.0;
 }

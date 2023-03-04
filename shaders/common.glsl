@@ -33,6 +33,7 @@ struct Material
 struct drawInstanceData
 {
 	mat4 modelMatrix;
+	mat4 previousModelMatrix;
 	Material material;
 	uint ID;
 	uint vertexOffset;

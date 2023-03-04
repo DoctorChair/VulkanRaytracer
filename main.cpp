@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
 
 	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
 
-	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
+	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_002.gltf");
 
 	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
 
@@ -76,13 +76,13 @@ int main(int argc, char* argv[])
 
 	PointLight point = {};
 	point.diameter = 0.2f;
-	point.position = glm::vec3(0.0f, 5.0f, 0.0f);
+	point.position = glm::vec3(0.0f, 8.0f, 0.0f);
 	point.color = glm::vec3(1.0f, 1.0f, 0.9f);
 	point.strength = 50.0f;
 
 	PointLight point2 = {};
 	point2.diameter = 0.1f;
-	point2.position = glm::vec3(0.0f, 8.0f, 0.0f);
+	point2.position = glm::vec3(0.0f, 2.0f, 0.0f);
 	point2.color = glm::vec3(1.0f, 1.0f, 0.0f);
 
 	SunLight sun = {};
@@ -186,6 +186,7 @@ int main(int argc, char* argv[])
 		uint32_t id = 0;
 		for(unsigned int i = 0; i<testScene.size(); i++)
 		{
+			instances[i].previousTransform = instances[i].transform;
 			raytracer.drawMeshInstance(instances[i], instances[i].transform);
 			id++;
 		}
