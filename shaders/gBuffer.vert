@@ -19,8 +19,9 @@ layout (location = 5) out flat uint instanceIndex;
 layout (location = 6) out vec3 T;
 layout (location = 7) out vec3 B;
 layout (location = 8) out vec3 N;
-layout (location = 9) out flat uint ID;
-layout (location = 10) out vec4 outPreviousPosition;
+layout (location = 9) out flat uint outID;
+layout (location = 10) out vec4 outPreviousProjectionSpacePosition;
+layout (location = 11) out vec4 outCurrentProjectionSpacePosition;
 
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
@@ -29,6 +30,8 @@ layout(set = 0, binding = 0) uniform  CameraBuffer{
     mat4 projectionMatrix;
     mat4 inverseProjectionMatrix;
 	vec3 cameraPosition;
+	mat4 previousProjectionMatrix;
+	mat4 previousViewMatrix;
 } cameraData;
 
 layout(set = 0, binding = 1) uniform  RenderBuffer{
@@ -36,7 +39,17 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint sunLightCount;
 	uint pointLightCount;
 	uint spotLightCount;
-	uint maxRecoursionDepth;
+  	uint maxRecoursionDepth;
+  	uint maxDiffuseSampleCount;
+  	uint maxSpecularSampleCount;
+  	uint maxShadowRaySampleCount;
+  	uint noiseSampleTextureIndex;
+	uint sampleSequenceLength;
+	uint frameNumber;
+	uint historyLength;
+	uint historyIndex;
+	uint nativeResolutionWidth;
+	uint nativeResolutionHeight;
 } globalDrawData;
 
 
@@ -67,10 +80,15 @@ void main()
 	outTexCoords0 = TexCoordPair.xy;
 	outTexCoords1 = TexCoordPair.zw;
 	
-	outPosition = model * vec4(vertexPos);
-	outPreviousPosition = previousModel * vec4(vertexPos);
-	gl_Position = projection * view * outPosition;
+	vec4 worldSpacePosition = model * vec4(vertexPos);
+	vec4 projectionSpacePosition = projection * view * worldSpacePosition;
+	vec4 previousProjectionSpacePosition = cameraData.previousProjectionMatrix * cameraData.previousViewMatrix * previousModel * vertexPos;
 
+	outCurrentProjectionSpacePosition = projectionSpacePosition;
+	outPreviousProjectionSpacePosition = previousProjectionSpacePosition;
+	outPosition = worldSpacePosition;
 
-	ID = drawData.instanceData[gl_InstanceIndex].ID;
+	outID = drawData.instanceData[gl_InstanceIndex].ID;
+
+	gl_Position = projectionSpacePosition;
 }

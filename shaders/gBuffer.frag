@@ -14,8 +14,8 @@ layout (location = 6) in vec3 T;
 layout (location = 7) in vec3 B;
 layout (location = 8) in vec3 N;
 layout (location = 9) in flat uint ID;
-layout (location = 10) in vec4 previousPosition;
-
+layout (location = 10) in vec4 previousProjectionSpacePosition;
+layout (location = 11) in vec4 currentProjectionSpacePosition;
 //output write
 layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outNormal;
@@ -79,16 +79,9 @@ void main()
 
 	outPosition = position;
 	
-	vec4 projectionSpacePositon = cameraData.projectionMatrix * cameraData.viewMatrix * position;
-	vec4 previousProjectionSpacePositon = cameraData.previousProjectionMatrix * cameraData.previousViewMatrix * previousPosition;
-
-	vec2 uv =  vec2((float(gl_FragCoord.x)) / 960.0, (float(gl_FragCoord.y)) / 540.0);
-	vec4 previousPosition = cameraData.previousProjectionMatrix * cameraData.previousViewMatrix * texture(priorPosition, uv);
-	
-	vec2 previous = vec2(previousProjectionSpacePositon.xy / previousProjectionSpacePositon.w) * 0.5 + 0.5;
-	vec2 current = vec2(projectionSpacePositon.xy / projectionSpacePositon.w) * 0.5 + 0.5;
-	
-	outVelocity = vec4(current - previous, 0.0, 1.0);
+	vec3 previous = (vec3(previousProjectionSpacePosition.xyz / previousProjectionSpacePosition.w) + 1.0) * 0.5;
+	vec3 current = (vec3(currentProjectionSpacePosition.xyz / currentProjectionSpacePosition.w) + 1.0) * 0.5;
+	outVelocity = vec4(current - previous, 1.0);
 	
 }
 

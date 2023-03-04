@@ -49,25 +49,29 @@ void main()
 	uint index = globalDrawData.historyIndex % globalDrawData.historyLength;
 
 	ivec2 pixCoord = ivec2((uv*PushConstants.nativeResolution));
-    vec4 hdrColor = vec4(0.0);
-	hdrColor = hdrColor + imageLoad(radiance, ivec3(pixCoord, index));
-	index = (index - 1) % globalDrawData.historyLength;
+   
+	vec4 original = imageLoad(radiance, ivec3(pixCoord, index));
+
+	 vec4 hdrColor = original;
 
 	for(uint i = 1; i < globalDrawData.historyLength; i++)
 	{ 
 		vec2 velocty = texture(sampler2D(veloctyHistory[globalDrawData.historyIndex], imageSampler), uv).xy;
+
 		uv = uv - velocty;
+		uv = vec2(clamp(uv.x, 0.0, 1.0), clamp(uv.y, 0.0, 1.0));
 		pixCoord = ivec2((uv * PushConstants.nativeResolution));
-		hdrColor = hdrColor + imageLoad(radiance, ivec3(pixCoord, index));
+		index = ((index - 1) % globalDrawData.historyLength * uint(index != 0)) + ((globalDrawData.historyLength - 1) * uint(index == 0));
+		vec4 history = imageLoad(radiance, ivec3(pixCoord, index));
 		
-		index = ((index - 1) % globalDrawData.historyLength * uint(index != 0)) + ((globalDrawData.historyLength - 1)*uint(index==0));	
+		hdrColor = hdrColor + history;			
 	}
 
 	hdrColor = hdrColor / float(globalDrawData.historyLength);
 
+
     vec4 mapped = vec4(1.0) - exp(-hdrColor * exposure);
     mapped = pow(mapped, vec4(1.0 / gamma));
 
-    hdrColor.w = 1.0;
 	outColor = mapped;
 }

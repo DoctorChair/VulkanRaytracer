@@ -101,7 +101,11 @@ void main()
   uint  shadowRayFlags =  gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
   float tMin     = 0.01;
   float tMax     = 1000.0;
-  vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV *vec2(1920.0/1024.0, 1080.0/1024.0));
+  
+  vec2 offset = vec2(float((globalDrawData.frameNumber) % globalDrawData.historyLength)) 
+      / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight));
+  vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV * vec2(1920.0/1024.0, 1080.0/1024.0) + offset);
+  
   vec4 outColor = vec4(0.0, 0.0, 0.0, 1.0);
   
   vec3 radiance = vec3(0.0, 0.0, 0.0);
@@ -117,9 +121,9 @@ void main()
     for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount; s++)
     {
       shadowPayload = 0.0;
-      
-      
-      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(1.0/float(s)));
+
+      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(s) 
+      / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
       
       float radius = pointLightBuffer.pointLights[i].radius;
       vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, noise.y));
@@ -248,7 +252,9 @@ void main()
   outColor.xyz = outColor.xyz + specularRadiance;
   outColor.xyz = outColor.xyz + diffuseRadiance; 
 
-  outColor.xyz = outColor.xyz / 3.0;
+  outColor.xyz = outColor.xyz / 2.0;
 
-  imageStore(image, ivec3(gl_LaunchIDEXT.xy, globalDrawData.frameNumber % globalDrawData.historyLength), outColor);
+  outColor.w = depth;
+
+  imageStore(image, ivec3(gl_LaunchIDEXT.xy, globalDrawData.historyIndex % globalDrawData.historyLength), outColor);
 }

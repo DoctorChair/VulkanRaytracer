@@ -1072,7 +1072,7 @@ void Raytracer::initHistoryBuffers()
 	_historyBuffer.velocityViews.resize(_historyLength);
 	 for(unsigned int i = 0; i<_historyLength; i++)
 	 {
-		 _historyBuffer.velocityHistoryBuffer[i] = VGM::Texture(VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		 _historyBuffer.velocityHistoryBuffer[i] = VGM::Texture(VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			 { nativeWidth, nativeHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		 _historyBuffer.velocityHistoryBuffer[i].createImageView(0, 1, 0, 1, _vulkan._device, &_historyBuffer.velocityViews[i]);
 	 }
@@ -1327,7 +1327,7 @@ void Raytracer::initGBufferShader()
 
 	VGM::PipelineConfigurator configurator;
 	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT
-		, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R32G32_SFLOAT };
+		, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT };
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
