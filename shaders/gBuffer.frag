@@ -43,12 +43,7 @@ layout(std430, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 	drawInstanceData instanceData[];
 } drawData;
 
-
-layout(set = 1, binding = 4) uniform sampler2D priorPosition;
-
 layout(set = 3, binding = 0) uniform texture2D textures[1024]; 
-
-
 
 void main()
 {
@@ -79,8 +74,8 @@ void main()
 
 	outPosition = position;
 	
-	vec3 previous = (vec3(previousProjectionSpacePosition.xyz / previousProjectionSpacePosition.w) + 1.0) * 0.5;
-	vec3 current = (vec3(currentProjectionSpacePosition.xyz / currentProjectionSpacePosition.w) + 1.0) * 0.5;
+	vec3 previous = (vec3(previousProjectionSpacePosition.xyz / previousProjectionSpacePosition.w)) * 0.5 + 0.5;
+	vec3 current = (vec3(currentProjectionSpacePosition.xyz / currentProjectionSpacePosition.w)) * 0.5 + 0.5;
 	outVelocity = vec4(current - previous, 1.0);
 	
 }

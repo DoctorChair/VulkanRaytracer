@@ -10,6 +10,7 @@
 #include "Texture.h"
 #include "Shader.h"
 #include "PipelineBuilder.h"
+#include "ComputeShaderProgram.h"
 
 #include "glm/glm.hpp"
 
@@ -78,14 +79,9 @@ struct HistoryBuffer
 	VGM::Texture radianceHistory;
 	VkImageView radianceView;
 
-
-
 	std::vector<VGM::Texture> idHistoryBuffer;
 	std::vector<VkImageView> idViews;
-
-	VGM::Texture priorPositionBuffer;
-	VkImageView priorPositionView;
-
+	
 	uint32_t currentIndex = 0;
 };
 
@@ -190,12 +186,12 @@ struct FrameSynchro
 	VkSemaphore _offsceenRenderSemaphore;
 	VkSemaphore _defferedRenderSemaphore;
 	VkSemaphore _raytraceSemaphore;
-	VkSemaphore _compositingSemaphore;
+	VkSemaphore _postProcessSemaphore;
 	VkSemaphore _presentSemaphore;
 	VkFence _offsrceenRenderFence;
 	VkFence _defferedRenderFence;
 	VkFence _raytraceFence;
-	VkFence _compositingFence;
+	VkFence _postProcessFence;
 
 	VkEvent _defferedFinishedEvent;
 	VkEvent _raytraceFinishedEvent;
@@ -226,6 +222,12 @@ struct SpotLight
 	float strength;
 };
 
+struct PostProcessLeapfrogBuffer
+{
+	std::vector<VGM::Texture> textures;
+	std::vector<VkImageView> views;
+};
+
 class Raytracer
 {
 public:
@@ -245,7 +247,6 @@ public:
 	void drawMeshInstance(MeshInstance instance, glm::mat4 transform);
 	void setNoiseTextureIndex(uint32_t index);
 
-
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
 	void drawPointLight(PointLight light);
@@ -261,7 +262,8 @@ private:
 	void initGBufferShader();
 	void initDefferedShader();
 	void initRaytraceShader();
-	void initCompositingShader();
+	void initAccumulateShader();
+	void initPostProcessingChain();
 	void initCommandBuffers();
 	void initSyncStructures();
 	void initDataBuffers();
@@ -272,6 +274,7 @@ private:
 	void initDefferedBuffers();
 	void initRaytraceBuffers();
 	void initHistoryBuffers();
+	void initPostProcessBuffers();
 	void initPresentFramebuffers();
 	void initTextureArrays();
 	void initShaderBindingTable();
@@ -281,15 +284,16 @@ private:
 	void updateGBufferDescriptorSets();
 	void updateDefferedDescriptorSets();
 	void updateRaytraceDescripotrSets();
-
 	void updateCompositingDescriptorSets();
+	void updatePostProcessDescriptorSets();
 
 	void updateGBufferFramebufferBindings();
 	void updateCompositingFramebufferBindings();
 
 	void executeDefferedPass();
 	void executeRaytracePass();
-	void executeCompositPass();
+	void executeAccumulatePass();
+	void executePostProcessPass();
 
 	float genHaltonSample(uint32_t base, uint32_t index);
 	void genHaltonSequence(uint32_t a, uint32_t b, uint32_t length);
@@ -303,7 +307,7 @@ private:
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
 
-	uint32_t _concurrencyCount = 2;
+	uint32_t _concurrencyCount = 1;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -318,11 +322,11 @@ private:
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 4;
-	uint32_t _sampleSequenceLength = 4;
-	uint32_t _historyLength = 4;
+	uint32_t _sampleSequenceLength = 2;
+	uint32_t _historyLength = 2;
 
-	uint32_t nativeWidth = 1920/2;
-	uint32_t nativeHeight = 1080/2;
+	uint32_t nativeWidth = 1920;
+	uint32_t nativeHeight = 1080;
 
 	uint32_t _frameNumber = 0;
 
@@ -335,6 +339,8 @@ private:
 	
 	MeshBuffer _meshBuffer;
 	AccelerationStructure _accelerationStructure;
+
+	HistoryBuffer _historyBuffer;
 
 	uint32_t _activeInstanceCount = 0;
 
@@ -351,21 +357,20 @@ private:
 	ShaderBindingTable _shaderBindingTable;
 	std::vector<RaytraceBuffer> _raytraceBufferChain;
 	
-	VGM::ShaderProgram _compositingShader;
-	VkPipelineLayout _compositingPipelineLayout;
-	std::vector<VGM::Framebuffer> _presentFramebuffers;
-
-	HistoryBuffer _historyBuffer;
+	VkPipelineLayout _postProcessPipelineLayout;
+	std::vector<VGM::ComputeShaderProgram> _postProcessingChain;
+	VGM::ComputeShaderProgram _colorMapingShader;
+	PostProcessLeapfrogBuffer _leapFrogBuffer;
 
 	VGM::DescriptorSetAllocator _descriptorSetAllocator;
 
-	uint32_t _currentFrameIndex = 1;
+	uint32_t _currentFrameIndex = 0;
 	uint32_t _currentSwapchainIndex = 0;
 
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
 	std::vector<VGM::CommandBuffer> _defferedRenderCommandBuffers;
-	std::vector<VGM::CommandBuffer> _compositingCommandBuffers;
+	std::vector<VGM::CommandBuffer> _postProcessCommandBuffers;
 
 	VGM::CommandBufferAllocator _computeCommandBufferAllocator;
 	std::vector<VGM::CommandBuffer> _raytraceRenderCommandBuffers;
@@ -404,7 +409,7 @@ private:
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _defferedDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _raytracerDescriptorSetAllocator;
-	VGM::DescriptorSetAllocator _compositingDescriptorSetAllocator;
+	VGM::DescriptorSetAllocator _postProcessDescriptorSetAllocator;
 
 	VkDescriptorSetLayout _globalLayout;
 	VkDescriptorSetLayout _gBufferLayout1;
@@ -413,14 +418,13 @@ private:
 
 	VkDescriptorSetLayout _textureLayout;
 
-	VkDescriptorSetLayout _defferedLayout;
-
 	VkDescriptorSetLayout _lightLayout;
 
 	VkDescriptorSetLayout _raytracerLayout1;
 	VkDescriptorSetLayout _raytracerLayout2;
 
-	VkDescriptorSetLayout _compositingLayout;
+	VkDescriptorSetLayout _postProcessLayout;
+	VkDescriptorSetLayout _postProcessInputOutputLayout;
 
 	std::vector<VkDescriptorSet> _globalDescriptorSets;
 
@@ -436,7 +440,9 @@ private:
 	std::vector<VkDescriptorSet> _raytracer1DescriptorSets;
 	std::vector<VkDescriptorSet> _raytracer2DescriptorSets;
 
-	std::vector<VkDescriptorSet> _compositingDescriptorSets;
+	std::vector<VkDescriptorSet> _postProcessDescriptorSets;
+
+	std::vector<VkDescriptorSet> _postProcessInputOutputDescriptorSets;
 
 	Mesh _dummyMesh;
 };

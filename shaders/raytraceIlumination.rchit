@@ -270,32 +270,7 @@ void main()
 	}
 
 	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount);
-
 	
-
-	for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
-	{
-		vec3 reflectionDirection = reflect(gl_WorldRayDirectionEXT, normal);
-
-		float cosTheta = dot(reflectionDirection, gl_WorldRayDirectionEXT);
-
-		traceRayEXT(topLevelAS, // acceleration structure
-        rayFlags,       // rayFlags
-        0xFF,           // cullMask
-        0,              // sbtRecordOffset
-        0,              // sbtRecordStride
-        0,              // missIndex
-        worldPosition,     // ray origin
-        tMin,           // ray min range
-        reflectionDirection,  // ray direction
-        tMax,           // ray max range
-        1               // payload (location = 0)
-        );
-	} 
-
-
-	incomigPayload.depth--;
-
 	radiance = radiance + diffuseRadiance; 
 
 	}

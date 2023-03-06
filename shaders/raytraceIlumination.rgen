@@ -83,7 +83,7 @@ layout(location = 0) rayPayloadEXT float shadowPayload;
 void main()
 {
   const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
-  const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
+  const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
   
   vec4 unlitColor = texture(primaryRayUnlitColorTexture, inUV);
   vec4 normal = texture(primaryRayNormalTexture, inUV);
@@ -95,6 +95,7 @@ void main()
 	float reflectance = 0.04;	
 	float roughness = roughnessMetalness.x;
 	float metallic = roughnessMetalness.y;
+  
 
   vec3 viewDirection = normalize(cameraData.cameraPosition - samplePosition.xyz);
   uint  rayFlags = gl_RayFlagsOpaqueEXT;
@@ -116,8 +117,6 @@ void main()
     lightDirection = normalize(lightDirection);
     float cosTheta = dot(lightDirection, normal.xyz);
     
-    if(cosTheta > 0.0)
-    {
     for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount; s++)
     {
       shadowPayload = 0.0;
@@ -150,7 +149,7 @@ void main()
       vec3 lightRadiance = lightColor * vec3(pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload * p * area);
 	    radiance =  radiance +  brdf * lightRadiance;
     }
-    }
+    
   }  
   radiance = radiance / float(globalDrawData.pointLightCount);
 
@@ -174,6 +173,7 @@ void main()
     tMax,           // ray max range
     0               // payload (location = 0)
     );
+
     vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 
 	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) * shadowPayload;
@@ -181,19 +181,33 @@ void main()
   }
 
 
-  payload.radiance = vec3(0.0);
+  payload.radiance = vec3(radiance);
+  
   payload.depth = 1;
 
   vec3 diffuseRadiance = vec3(0.0);
   
+  vec3 w = vec3(0.0);
+
   for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
   {
-    uint index = i + globalDrawData.frameNumber % globalDrawData.sampleSequenceLength;
-    vec2 noise = sampleSequence.samples[index];
+    /* uint index = (i + globalDrawData.frameNumber) % globalDrawData.sampleSequenceLength;
+    vec2 noise = sampleSequence.samples[index]; */
     
+    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+      / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
+
     float pdfValue = lambertImportancePDF(noise.x);
+    float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
+
+    float weight = veachBalanceHeuristik(ggxPdfValue, pdfValue);
+   
+    w.x = weight;
+
     vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
+
     float cosTheta = max(dot(sampleDirection, normal.xyz), 0.0);
+
     traceRayEXT(topLevelAS, // acceleration structure
       rayFlags,       // rayFlags
       0xFF,           // cullMask
@@ -206,25 +220,34 @@ void main()
       tMax,           // ray max range
       1               // payload (location = 0)
       );
-    diffuseRadiance = diffuseRadiance + (unlitColor.xyz * cosTheta * payload.radiance) / pdfValue;
+    diffuseRadiance = diffuseRadiance + (unlitColor.xyz * cosTheta * payload.radiance) * weight / pdfValue;
+    diffuseRadiance = diffuseRadiance;
+    
   }
-  diffuseRadiance = diffuseRadiance / float( globalDrawData.maxDiffuseSampleCount) * (1.0 - metallic);
+  diffuseRadiance = diffuseRadiance / float( globalDrawData.maxDiffuseSampleCount);
+
+  payload.radiance = vec3(radiance);
 
   vec3 specularRadiance = vec3(0.0);
 
   for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
 	{
-    uint index = i + globalDrawData.frameNumber % globalDrawData.sampleSequenceLength;
-    vec2 noise = sampleSequence.samples[index];
+    uint index = (i + globalDrawData.frameNumber) % globalDrawData.sampleSequenceLength;
+    /* vec2 noise = sampleSequence.samples[index]; */
+
+    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+      / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
     float pdfValue = ggxImportancePDF(noise.x, roughness);
+    float lambertPDFValue =  lambertImportancePDF(noise.x);
+
+    float weight = veachBalanceHeuristik(lambertPDFValue, pdfValue);
+
+    w.y = weight;
+
     vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
 
     vec3 reflectionDirection = reflect(-viewDirection, halfwayVector);
-    if(dot(reflectionDirection, normal.xyz) < 0)
-    {
-      reflectionDirection = reflect(-viewDirection, normal.xyz);
-    }
 
 		float cosTheta = max(dot(reflectionDirection, normal.xyz), 0.0f);
 
@@ -243,16 +266,17 @@ void main()
 
     vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance); 
 
-    specularRadiance = specularRadiance + ( brdf * payload.radiance)  / pdfValue;
-    specularRadiance = payload.radiance;
+    specularRadiance = specularRadiance + ( brdf * payload.radiance) * weight / pdfValue;
 	} 
   specularRadiance = specularRadiance / float(globalDrawData.maxSpecularSampleCount);
 	
   outColor.xyz = radiance;
   outColor.xyz = outColor.xyz + specularRadiance;
-  outColor.xyz = outColor.xyz + diffuseRadiance; 
+  outColor.xyz = outColor.xyz + diffuseRadiance * (1.0 - metallic);
 
-  outColor.xyz = outColor.xyz / 2.0;
+  outColor.xyz = outColor.xyz / 3.0;
+
+  /*  outColor.xyz = w; */
 
   outColor.w = depth;
 

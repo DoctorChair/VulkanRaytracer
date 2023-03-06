@@ -4,7 +4,7 @@ float ndfGGX(float normalDotHalfway, float alpha)
 {
 	float hv = normalDotHalfway * normalDotHalfway;
 	float alphaSquared = alpha * alpha;
-	return alphaSquared / (M_PI * (((hv * hv) * (alphaSquared - 1.0) + 1.0) * ((hv * hv) * (alphaSquared - 1.0) + 1.0)));
+	return alphaSquared / (M_PI * pow((pow(hv, 2.0) * (alphaSquared - 1.0 ) + 1.0), 2.0 ));
 }
 
 float ndfPhong(float normalDotHalfway, float roughness)
@@ -39,7 +39,7 @@ vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, v
 	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0);
 
 	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
-	float geometric = geometricFunction(normalDotView, normalDotLightDir, alpha * 0.5);
+	float geometric = geometricFunction(normalDotView, normalDotLightDir, pow(alpha+1.0, 2.0) / 8.0);
 	float ndf = ndfGGX(normalDotHalfway, alpha);
 
 	vec3 specular = ( ndf * fresnel * geometric )
@@ -103,7 +103,7 @@ vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 
 vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float maxPhiDeviationAngle, float randomTheta, float randomPhi)
 {
 	
-	vec3 tangent = vec3(originVector.z, 0.0, -originVector.x) * float(abs(originVector.x) > abs(originVector.y))
+	/* vec3 tangent = vec3(originVector.z, 0.0, -originVector.x) * float(abs(originVector.x) > abs(originVector.y))
 				+ vec3(0.0, -originVector.z, originVector.y) * float(abs(originVector.y) > abs(originVector.x));
 	vec3 bitanget = normalize(cross(originVector, tangent));
 	
@@ -113,6 +113,20 @@ vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float m
 	sampleVector.z = sin(maxThetaDeviationAngle * randomTheta) * sin(maxPhiDeviationAngle * randomPhi);
 	
 	mat3 tbn = mat3(tangent, originVector, bitanget);
+ */
+	float phi = randomPhi * maxPhiDeviationAngle;
+	float theta = randomTheta * maxThetaDeviationAngle;
+
+	vec3 sampleVector;
+	sampleVector.x = cos(phi) * sin(theta);
+	sampleVector.y = sin(phi) * sin(theta);
+	sampleVector.z = cos(theta);
+
+	vec3 up = float(abs(originVector.z) < 0.999) *  vec3(0.0, 0.0, 1.0) + float(abs(originVector.z) >= 0.999) * vec3(1.0, 0.0, 0.0);
+	vec3 tangent = normalize(cross(up, originVector));
+	vec3 bitanget = cross(originVector, tangent);
+
+	mat3 tbn = mat3(tangent, bitanget, originVector);
 
 	return tbn *  normalize(sampleVector);
 }
@@ -130,10 +144,15 @@ vec3 createLightSampleVector(vec3 originVector, float radius, float randomTheta,
 
 float lambertImportancePDF(float x)
 {
-	return asin(x);
+	return asin(sqrt(x));
 }
 
 float ggxImportancePDF(float x, float alpha)
 {
-	return atan((alpha * sqrt(x)) / sqrt(1.0 -x));
+	return atan((alpha * sqrt(x)) / sqrt(1.0 - x));
+}
+
+float veachBalanceHeuristik(float pdf, float otherPDF)
+{
+	return pdf / (pdf + otherPDF);
 }

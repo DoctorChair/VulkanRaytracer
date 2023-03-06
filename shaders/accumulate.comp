@@ -1,0 +1,44 @@
+#version 460
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform RenderBuffer{
+	float fog;
+	uint sunLightCount;
+	uint pointLightCount;
+	uint spotLightCount;
+  	uint maxRecoursionDepth;
+  	uint maxDiffuseSampleCount;
+  	uint maxSpecularSampleCount;
+  	uint maxShadowRaySampleCount;
+  	uint noiseSampleTextureIndex;
+	uint sampleSequenceLength;
+	uint frameNumber;
+	uint historyLength;
+	uint historyIndex;
+	uint nativeResolutionWidth;
+	uint nativeResolutionHeight;
+} globalDrawData;
+
+layout(set = 0, binding = 1, rgba32f) uniform readonly image3D radianceHistory;
+layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[2];
+layout(set = 0, binding = 3, rgba32f) uniform readonly image2D position; 
+layout(set = 0, binding = 4, rgba32f) uniform readonly image2D normal; 
+layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
+
+layout(set = 1, binding = 0, rgba32f) uniform readonly image2D inputImage;
+layout(set = 1, binding = 1, rgba32f) uniform writeonly image2D outputImage; 
+
+void main()
+{
+    vec4 radiance = vec4(0.0);
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+
+    for(uint i = 0; i<globalDrawData.historyLength; i++)
+    {
+        radiance = radiance + imageLoad(radianceHistory, ivec3(coord, globalDrawData.historyIndex));   
+    }
+    radiance = radiance / float(globalDrawData.historyLength);
+
+    imageStore(outputImage, coord, radiance);
+}

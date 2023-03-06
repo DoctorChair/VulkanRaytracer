@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
 
 	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
 
-	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_002.gltf");
+	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
 
 	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
 
@@ -83,7 +83,8 @@ int main(int argc, char* argv[])
 	PointLight point2 = {};
 	point2.diameter = 0.1f;
 	point2.position = glm::vec3(0.0f, 2.0f, 0.0f);
-	point2.color = glm::vec3(1.0f, 1.0f, 0.0f);
+	point2.color = glm::vec3(0.0f, 0.0f, 1.0f);
+	point2.strength = 50.0f;
 
 	SunLight sun = {};
 	sun.color = glm::vec3(1.0f , 1.0f, 1.0f);
@@ -192,6 +193,7 @@ int main(int argc, char* argv[])
 		}
 		
 		raytracer.drawPointLight(point);
+		raytracer.drawPointLight(point2);
 		raytracer.drawSpotLight(spot);
 		raytracer.drawSunLight(sun);
 		raytracer.update();
