@@ -31,24 +31,33 @@ layout(set = 1, binding = 1, rgba32f) uniform writeonly image2D outputImage;
 
 void main()
 {
-    vec4 radiance = vec4(0.0);
-    
-	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-	uint index = globalDrawData.historyIndex;
-	radiance = imageLoad(radianceHistory, ivec3(coord, index));
+    const float weights[5] = float[5](0.0625, 0.25, 0.375, 0.25, 0.0625);
 
-	index = index - 1 % globalDrawData.historyLength * uint(index != 0) + (globalDrawData.historyLength - 1) * uint(index == 0);
-
-    for(uint i = 1; i<globalDrawData.historyLength; i++)
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);	
+    vec4 c = vec4(0.0);
+    for(int i = 0; i<5; i++)
     {
-		coord = coord - ivec2(imageLoad(velocityHistory[index], coord).xy * vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight)));
-        coord.x = clamp(coord.x, 0, int(globalDrawData.nativeResolutionWidth));
-		coord.y = clamp(coord.y, 0, int(globalDrawData.nativeResolutionHeight));
-		radiance = radiance + imageLoad(radianceHistory, ivec3(coord, index));
+        int distance = int(pow(2, i));
 
-		index = index - 1 % globalDrawData.historyLength * uint(index != 0) + (globalDrawData.historyLength - 1) * uint(index == 0);   
+        int xStart = coord.x - 2 * distance;
+       
+        for(int j = 0; j<5; j++)
+        {
+            int yStart = coord.y - 2 * distance;
+            for(int j = 0; j<5; j++)
+            {
+                xStart = clamp(xStart, 0, int(globalDrawData.nativeResolutionWidth)); 
+                yStart = clamp(yStart, 0, int(globalDrawData.nativeResolutionHeight)); 
+                ivec2 uv = ivec2(xStart, yStart);
+                c = c + imageLoad(inputImage, ivec2(uv)) * 1/25.0; 
+                yStart = yStart + distance;
+            } 
+            xStart = xStart + distance;
+        }
+        
     }
-    radiance = radiance / float(globalDrawData.historyLength);
 
-    imageStore(outputImage, coord, radiance);
+    c = c / 5.0;
+
+    imageStore(outputImage, coord, c);
 }

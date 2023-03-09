@@ -183,7 +183,7 @@ void main()
 
   payload.radiance = vec3(radiance);
   
-  payload.depth = 1;
+  payload.depth = 0;
 
   vec3 diffuseRadiance = vec3(0.0);
   
@@ -205,7 +205,7 @@ void main()
     w.x = weight;
 
     vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
-
+  
     float cosTheta = max(dot(sampleDirection, normal.xyz), 0.0);
 
     traceRayEXT(topLevelAS, // acceleration structure
@@ -220,7 +220,7 @@ void main()
       tMax,           // ray max range
       1               // payload (location = 0)
       );
-    diffuseRadiance = diffuseRadiance + (unlitColor.xyz * cosTheta * payload.radiance) * weight / pdfValue;
+    diffuseRadiance = diffuseRadiance + (unlitColor.xyz * cosTheta * payload.radiance) /* * weight / pdfValue */;
     diffuseRadiance = diffuseRadiance;
     
   }
@@ -241,7 +241,8 @@ void main()
     float pdfValue = ggxImportancePDF(noise.x, roughness);
     float lambertPDFValue =  lambertImportancePDF(noise.x);
 
-    float weight = veachBalanceHeuristik(lambertPDFValue, pdfValue);
+    pdfValue = max(pdfValue, 0.001);
+    float weight = veachBalanceHeuristik(pdfValue ,lambertPDFValue);
 
     w.y = weight;
 
@@ -249,7 +250,7 @@ void main()
 
     vec3 reflectionDirection = reflect(-viewDirection, halfwayVector);
 
-		float cosTheta = max(dot(reflectionDirection, normal.xyz), 0.0f);
+		float cosTheta = max(dot(reflectionDirection, halfwayVector), 0.0f);
 
 		traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
@@ -266,17 +267,17 @@ void main()
 
     vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance); 
 
-    specularRadiance = specularRadiance + ( brdf * payload.radiance) * weight / pdfValue;
+    specularRadiance = specularRadiance + payload.radiance * brdf /* * weight / pdfValue */;
 	} 
   specularRadiance = specularRadiance / float(globalDrawData.maxSpecularSampleCount);
 	
   outColor.xyz = radiance;
-  outColor.xyz = outColor.xyz + specularRadiance;
+  outColor.xyz = outColor.xyz + specularRadiance; 
   outColor.xyz = outColor.xyz + diffuseRadiance * (1.0 - metallic);
 
   outColor.xyz = outColor.xyz / 3.0;
 
-  /*  outColor.xyz = w; */
+  //outColor.xyz = w;
 
   outColor.w = depth;
 

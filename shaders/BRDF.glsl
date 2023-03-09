@@ -34,23 +34,23 @@ vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, v
 
 	vec3 r0 = mix(vec3(reflectance), color, metallic);
 
-	float normalDotLightDir = dot(normal, lightDirection);
-	float normalDotView = dot(normal, viewDirection);
-	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0);
+	float normalDotLightDir = max(dot(normal, lightDirection), 0.01);
+	float normalDotView = max(dot(normal, viewDirection), 0.01);
+	float normalDotHalfway = max(dot(normal, halfwayVector), 0.01);
 
 	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
 	float geometric = geometricFunction(normalDotView, normalDotLightDir, pow(alpha+1.0, 2.0) / 8.0);
 	float ndf = ndfGGX(normalDotHalfway, alpha);
 
 	vec3 specular = ( ndf * fresnel * geometric )
-					/ (4 * max(normalDotLightDir, 0.0001) * max(normalDotView, 0.0001));
+					/ (4 * max(normalDotLightDir, 0.01) * max(normalDotView, 0.01));
 
 	vec3 lambert = color;
 	lambert = lambert * (vec3(1.0) - fresnel);
 	lambert = lambert * (1.0 - metallic);
 	lambert = lambert / M_PI;
 
-	return  lambert  + specular;
+	return lambert + specular;
 }
 
 vec3 cookTorrancePhongBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, float metallic, float roughness, float reflectance)
@@ -86,9 +86,9 @@ vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 
 
 	vec3 r0 = mix(vec3(reflectance), color, metallic);
 
-	float normalDotLightDir = dot(normal, lightDirection);
-	float normalDotView = dot(normal, viewDirection);
-	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0);
+	float normalDotLightDir = max(dot(normal, lightDirection), 0.01);
+	float normalDotView = max(dot(normal, viewDirection), 0.01);
+	float normalDotHalfway = max(dot(normal, halfwayVector), 0.01);
 
 	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
 	float geometric = geometricFunction(normalDotView, normalDotLightDir, alpha * 0.5);
@@ -97,7 +97,7 @@ vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 
 	vec3 specular = ( ndf * fresnel * geometric )
 					/ (4 * max(normalDotLightDir, 0.0001) * max(normalDotView, 0.0001));
 
-	return specular;
+	return color; specular;
 }
 
 vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float maxPhiDeviationAngle, float randomTheta, float randomPhi)

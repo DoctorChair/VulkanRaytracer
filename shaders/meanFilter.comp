@@ -31,6 +31,20 @@ layout(set = 1, binding = 1, rgba32f) uniform writeonly image2D outputImage;
 
 void main()
 {
-	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-	imageStore(outputImage, coord, imageLoad(inputImage, coord));
+	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);	
+	vec3 sum = vec3(0.0);
+	for(int i = 0; i < 3; i++)
+	{
+		int x = coord.x - 1 + i;
+		x = clamp(x, 0, int(globalDrawData.nativeResolutionWidth));
+		for(int j = 0; j < 3; j++)
+		{	
+			int y = coord.y - 1 + j;
+			clamp(x, 0, int(globalDrawData.nativeResolutionHeight));
+			sum = sum + imageLoad(inputImage, ivec2(x, y)).xyz;
+		}	
+	}
+	sum = sum / 9.0;
+
+	imageStore(outputImage, coord, vec4(sum, 1.0));
 }

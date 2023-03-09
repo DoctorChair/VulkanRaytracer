@@ -191,7 +191,7 @@ void main()
 
 			vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
 
-			float attenuation = 1.0/(distance*distance);
+			float attenuation = 1.0/max((distance*distance), 0.001);
 
 			vec3 viewDirection = worldPosition - gl_WorldRayOriginEXT;
 
@@ -200,9 +200,9 @@ void main()
 			vec3 lightRadiance = lightColor * pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload * area;
 
 			radiance = radiance + brdf * lightRadiance;
-	}
+		}
 
-	for(uint i = 0; i < globalDrawData.sunLightCount; i++)
+	/* for(uint i = 0; i < globalDrawData.sunLightCount; i++)
 	{
 		shadowPayload = 0.0;
 
@@ -231,7 +231,7 @@ void main()
 		vec3 lightRadiance = lightColor* sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload;
 
 		radiance = radiance + brdf * lightRadiance;
-	}
+	} */
 	
 	
 
@@ -272,7 +272,7 @@ void main()
 	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount);
 	
 	radiance = radiance + diffuseRadiance; 
-
+	
 	}
 	} 
 

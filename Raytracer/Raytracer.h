@@ -322,8 +322,8 @@ private:
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 4;
-	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 2;
+	uint32_t _sampleSequenceLength = 3;
+	uint32_t _historyLength = 3;
 
 	uint32_t nativeWidth = 1920;
 	uint32_t nativeHeight = 1080;
