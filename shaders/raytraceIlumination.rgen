@@ -200,7 +200,7 @@ void main()
     float pdfValue = lambertImportancePDF(noise.x);
     float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
 
-    float weight = veachBalanceHeuristik(ggxPdfValue, pdfValue);
+    float weight = veachBalanceHeuristik(pdfValue, ggxPdfValue);
    
     w.x = weight;
 
@@ -220,9 +220,8 @@ void main()
       tMax,           // ray max range
       1               // payload (location = 0)
       );
-    diffuseRadiance = diffuseRadiance + (unlitColor.xyz * cosTheta * payload.radiance) /* * weight / pdfValue */;
-    diffuseRadiance = diffuseRadiance;
-    
+
+    diffuseRadiance = diffuseRadiance + (unlitColor.xyz * cosTheta * payload.radiance) * weight / pdfValue;
   }
   diffuseRadiance = diffuseRadiance / float( globalDrawData.maxDiffuseSampleCount);
 
@@ -267,19 +266,17 @@ void main()
 
     vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance); 
 
-    specularRadiance = specularRadiance + payload.radiance * brdf /* * weight / pdfValue */;
+    specularRadiance = specularRadiance + payload.radiance * brdf *  weight / pdfValue;
 	} 
   specularRadiance = specularRadiance / float(globalDrawData.maxSpecularSampleCount);
 	
   outColor.xyz = radiance;
   outColor.xyz = outColor.xyz + specularRadiance; 
-  outColor.xyz = outColor.xyz + diffuseRadiance * (1.0 - metallic);
+  outColor.xyz = outColor.xyz + diffuseRadiance;
 
-  outColor.xyz = outColor.xyz / 3.0;
-
-  //outColor.xyz = w;
+  outColor.xyz = outColor.xyz / 2.0;
 
   outColor.w = depth;
 
-  imageStore(image, ivec3(gl_LaunchIDEXT.xy, globalDrawData.historyIndex % globalDrawData.historyLength), outColor);
+  imageStore(image, ivec3(gl_LaunchIDEXT.xy, globalDrawData.historyIndex), outColor);
 }

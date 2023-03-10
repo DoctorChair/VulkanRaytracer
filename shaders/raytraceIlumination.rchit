@@ -23,13 +23,17 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint sunLightCount;
 	uint pointLightCount;
 	uint spotLightCount;
-  	uint maxRecoursionDepth;
-  	uint maxDiffuseSampleCount;
-  	uint maxSpecularSampleCount;
-  	uint maxShadowRaySampleCount;
-  	uint noiseSampleTextureIndex;
+	uint maxRecoursionDepth;
+	uint maxDiffuseSampleCount;
+	uint maxSpecularSampleCount;
+	uint maxShadowRaySampleCount;
+	uint noiseSampleTextureIndex;
 	uint sampleSequenceLength;
 	uint frameNumber;
+	uint historyLength;
+	uint historyIndex;
+	uint nativeResolutionWidth;
+	uint nativeResolutionHeight;
 } globalDrawData;
 
 layout(set = 1, binding = 0) uniform sampler2D primaryRayColorTexture;
@@ -162,6 +166,9 @@ void main()
 	uint  rayFlags = gl_RayFlagsOpaqueEXT;
 	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
 
+	vec2 offset = vec2(gl_LaunchIDEXT.xy) / vec2(1920, 1080);
+	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), offset);
+
 	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth)
 	{
 		for(uint i = 0; i < globalDrawData.pointLightCount; i++)
@@ -202,7 +209,7 @@ void main()
 			radiance = radiance + brdf * lightRadiance;
 		}
 
-	/* for(uint i = 0; i < globalDrawData.sunLightCount; i++)
+	for(uint i = 0; i < globalDrawData.sunLightCount; i++)
 	{
 		shadowPayload = 0.0;
 
@@ -231,27 +238,31 @@ void main()
 		vec3 lightRadiance = lightColor* sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload;
 
 		radiance = radiance + brdf * lightRadiance;
-	} */
+	}
 	
 	
 
 	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth+1)
 	{
 	vec3 diffuseRadiance = vec3(0.0);
-
-	incomigPayload.depth++;
-
-	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), vec2(float(gl_LaunchIDEXT)));
+	vec3 specularRadiance = vec3(0.0);
 	
 	for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
 	{	
+		incomigPayload.depth++;
+
 		uint index = i % globalDrawData.sampleSequenceLength;
-    	vec2 noise = sampleSequence.samples[index];
+    	
+		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+      	/ vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
     
     	float pdfValue = lambertImportancePDF(noise.x);
+    	float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
+
+    	float weight = veachBalanceHeuristik(pdfValue, ggxPdfValue);
     	vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
 
-		float cosTheta = dot(sampleDirection, normal);
+		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
 
 		traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
@@ -266,12 +277,58 @@ void main()
         1               // payload (location = 0)
         );
 
-		diffuseRadiance = diffuseRadiance + colorTexture.xyz * max(cosTheta, 0.0) * incomigPayload.radiance / pdfValue;
+		diffuseRadiance = diffuseRadiance + colorTexture.xyz * cosTheta * incomigPayload.radiance * weight / pdfValue;
+
+		incomigPayload.depth--;
 	}
 
+	for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
+	{
+		incomigPayload.depth++;
+
+		uint index = i % globalDrawData.sampleSequenceLength;
+    	
+		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+      	/ vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
+    
+    	float pdfValue = ggxImportancePDF(noise.x, roughness);
+    	float lambertPDFValue =  lambertImportancePDF(noise.x);
+    	
+		vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
+
+		pdfValue = max(pdfValue, 0.001);
+    	float weight = veachBalanceHeuristik(pdfValue ,lambertPDFValue);
+
+		vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
+
+    	vec3 reflectionDirection = reflect(-gl_WorldRayDirectionEXT, halfwayVector);
+
+		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
+
+		traceRayEXT(topLevelAS, // acceleration structure
+        rayFlags,       // rayFlags
+        0xFF,           // cullMask
+        0,              // sbtRecordOffset
+        0,              // sbtRecordStride
+        0,              // missIndex
+        worldPosition.xyz,     // ray origin
+        tMin,           // ray min range
+        reflectionDirection,  // ray direction
+        tMax,           // ray max range
+        1               // payload (location = 0)
+        );
+
+		incomigPayload.depth--;
+
+		vec3 brdf = ggxSpecularBRDF(gl_WorldRayDirectionEXT, reflectionDirection, normal.xyz, colorTexture.xyz, metallic, roughness, reflectance);
+
+		specularRadiance = specularRadiance + incomigPayload.radiance * brdf * weight / pdfValue; 
+	}
+	
+	specularRadiance = specularRadiance / float(globalDrawData.maxSpecularSampleCount);
 	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount);
 	
-	radiance = radiance + diffuseRadiance; 
+	radiance = radiance + specularRadiance + diffuseRadiance; 
 	
 	}
 	} 

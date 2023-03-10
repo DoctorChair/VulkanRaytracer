@@ -41,7 +41,7 @@ void main()
 
     for(uint i = 1; i<globalDrawData.historyLength; i++)
     {
-		coord = coord - ivec2(imageLoad(velocityHistory[index], coord).xy * vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight)));
+		coord = coord;/// + ivec2(imageLoad(velocityHistory[index], coord).xy * vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight)));
         coord.x = clamp(coord.x, 0, int(globalDrawData.nativeResolutionWidth));
 		coord.y = clamp(coord.y, 0, int(globalDrawData.nativeResolutionHeight));
 		radiance = radiance + imageLoad(radianceHistory, ivec3(coord, index));

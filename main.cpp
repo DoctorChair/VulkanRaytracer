@@ -76,15 +76,21 @@ int main(int argc, char* argv[])
 
 	PointLight point = {};
 	point.diameter = 0.2f;
-	point.position = glm::vec3(0.0f, 8.0f, 0.0f);
+	point.position = glm::vec3(0.0f, 2.0f, 0.0f);
 	point.color = glm::vec3(0.0f, 0.0f, 1.0f);
 	point.strength = 50.0f;
 
 	PointLight point2 = {};
-	point2.diameter = 0.1f;
-	point2.position = glm::vec3(0.0f, 2.0f, 0.0f);
+	point2.diameter = 0.2f;
+	point2.position = glm::vec3(0.0f, 8.0f, 0.0f);
 	point2.color = glm::vec3(1.0f, 0.0f, 0.0f);
 	point2.strength = 50.0f;
+
+	PointLight point3 = {};
+	point3.diameter = 0.2f;
+	point3.position = glm::vec3(0.0f, 6.0f, 0.0f);
+	point3.color = glm::vec3(0.0f, 1.0f, 0.0f);
+	point3.strength = 50.0f;
 
 	SunLight sun = {};
 	sun.color = glm::vec3(1.0f , 1.0f, 1.0f);
@@ -194,6 +200,7 @@ int main(int argc, char* argv[])
 		
 		raytracer.drawPointLight(point);
 		raytracer.drawPointLight(point2);
+		raytracer.drawPointLight(point3);
 		raytracer.drawSpotLight(spot);
 		raytracer.drawSunLight(sun);
 		raytracer.update();

@@ -373,7 +373,6 @@ void Raytracer::drawMeshInstance(MeshInstance meshInstance, glm::mat4 transform)
 	instace.transform.matrix[2][2] = transform[1][1];
 	instace.transform.matrix[2][3] = transform[2][3];
 
-
 	instace.accelerationStructureReference = _accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex].getAddress(_vulkan._device);
 	instace.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 	instace.instanceCustomIndex = command.firstInstance;
