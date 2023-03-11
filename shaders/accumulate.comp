@@ -21,7 +21,7 @@ layout(set = 0, binding = 0) uniform RenderBuffer{
 } globalDrawData;
 
 layout(set = 0, binding = 1, rgba32f) uniform readonly image3D radianceHistory;
-layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[2];
+layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[8];
 layout(set = 0, binding = 3, rgba32f) uniform readonly image2D position; 
 layout(set = 0, binding = 4, rgba32f) uniform readonly image2D normal; 
 layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
@@ -29,26 +29,92 @@ layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
 layout(set = 1, binding = 0, rgba32f) uniform readonly image2D inputImage;
 layout(set = 1, binding = 1, rgba32f) uniform writeonly image2D outputImage; 
 
+vec4 loadInterpolateBilinear2D(vec3 texCoord, vec2 imageDimesions)
+{
+	vec2 imageCoord = texCoord.xy * vec2(imageDimesions);
+
+	ivec2 a = ivec2(floor(imageCoord.x), floor(imageCoord.y));
+	ivec2 b = ivec2(floor(imageCoord.x), ceil(imageCoord.y));
+	ivec2 c = ivec2(ceil(imageCoord.x), floor(imageCoord.y));
+	ivec2 d = ivec2(ceil(imageCoord.x), ceil(imageCoord.y));
+
+	vec4 A = imageLoad(velocityHistory[uint(texCoord.z)], a);
+	vec4 B = imageLoad(velocityHistory[uint(texCoord.z)], b);
+	vec4 C = imageLoad(velocityHistory[uint(texCoord.z)], c);
+	vec4 D = imageLoad(velocityHistory[uint(texCoord.z)], d);
+
+	vec4 colorA = mix(A, B, imageCoord.y - floor(imageCoord.y));
+	vec4 colorb = mix(C, D, imageCoord.y - floor(imageCoord.y));
+	vec4 result = mix(colorA, colorb, imageCoord.x - floor(imageCoord.x));
+
+	return result;
+}
+
+vec4 loadInterpolateBilinear3D(vec3 texCoord, vec2 imageDimesions)
+{
+	vec2 imageCoord = texCoord.xy * vec2(imageDimesions);
+
+	ivec3 a = ivec3(floor(imageCoord.x), floor(imageCoord.y), int(texCoord.z));
+	ivec3 b = ivec3(floor(imageCoord.x), ceil(imageCoord.y), int(texCoord.z));
+	ivec3 c = ivec3(ceil(imageCoord.x), floor(imageCoord.y), int(texCoord.z));
+	ivec3 d = ivec3(ceil(imageCoord.x), ceil(imageCoord.y), int(texCoord.z));
+
+	vec4 A = imageLoad(radianceHistory, a);
+	vec4 B = imageLoad(radianceHistory, b);
+	vec4 C = imageLoad(radianceHistory, c);
+	vec4 D = imageLoad(radianceHistory, d);
+
+	vec4 colorA = mix(A, B, imageCoord.y - floor(imageCoord.y));
+	vec4 colorb = mix(C, D, imageCoord.y - floor(imageCoord.y));
+	vec4 result = mix(colorA, colorb, imageCoord.x - floor(imageCoord.x));
+
+	return result;
+}
+
 void main()
 {
-    vec4 radiance = vec4(0.0);
-    
-	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+	vec2 imageDimesions = vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight);
+	vec2 uv = gl_GlobalInvocationID.xy / vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight);
+	
 	uint index = globalDrawData.historyIndex;
-	radiance = imageLoad(radianceHistory, ivec3(coord, index));
 
-	index = index - 1 % globalDrawData.historyLength * uint(index != 0) + (globalDrawData.historyLength - 1) * uint(index == 0);
+    vec4 radiance = vec4(0.0);
+    vec4 currentFrame = imageLoad(radianceHistory, ivec3(gl_GlobalInvocationID.xy, index));
+	radiance = currentFrame;
+	
+	vec4 nextFrame;
 
-    for(uint i = 1; i<globalDrawData.historyLength; i++)
-    {
-		coord = coord;/// + ivec2(imageLoad(velocityHistory[index], coord).xy * vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight)));
-        coord.x = clamp(coord.x, 0, int(globalDrawData.nativeResolutionWidth));
-		coord.y = clamp(coord.y, 0, int(globalDrawData.nativeResolutionHeight));
-		radiance = radiance + imageLoad(radianceHistory, ivec3(coord, index));
+	vec4 oldH = loadInterpolateBilinear2D(vec3(uv, index), imageDimesions);
+	vec4 newH;
+
+
+	uint count = 1;
+	bool abort = false;
+
+    for(uint i = 1; i<globalDrawData.historyLength && !abort; i++)
+    {	
+		uv = uv - oldH.xy;
+		
+		uv.x = clamp(uv.x, 0.0, 1.0);
+		uv.y = clamp(uv.y, 0.0, 1.0);
 
 		index = index - 1 % globalDrawData.historyLength * uint(index != 0) + (globalDrawData.historyLength - 1) * uint(index == 0);   
-    }
-    radiance = radiance / float(globalDrawData.historyLength);
 
-    imageStore(outputImage, coord, radiance);
+		newH = loadInterpolateBilinear2D(vec3(uv, index), imageDimesions);
+		
+		nextFrame =  loadInterpolateBilinear3D(vec3(uv, index), imageDimesions);
+
+		if(oldH.z == newH.z)
+		{
+		radiance = radiance + nextFrame;
+		}
+
+		abort = !(oldH.z == newH.z);
+		count++;
+		oldH = newH;
+    }
+
+    radiance.xyz = radiance.xyz / float(count);
+
+    imageStore(outputImage, ivec2(gl_GlobalInvocationID.xy), radiance);
 }

@@ -31,6 +31,7 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 	features2.features.multiDrawIndirect = VK_TRUE;
 	features2.features.samplerAnisotropy = VK_TRUE;
+	features2.features.independentBlend = VK_TRUE;
 
 	features2.pNext = &features13;
 	features13.pNext = &addressFeatures;
@@ -672,11 +673,23 @@ void Raytracer::updatePostProcessDescriptorSets()
 	radianceInfo.imageView = _historyBuffer.radianceView;
 	radianceInfo.sampler = VK_NULL_HANDLE;
 
+	VkDescriptorImageInfo normalInfo = {};
+	normalInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	normalInfo.imageView = _gBufferChain[_currentFrameIndex].normalView;
+	normalInfo.sampler = VK_NULL_HANDLE;
+
+	VkDescriptorImageInfo positionInfo = {};
+	positionInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	positionInfo.imageView = _gBufferChain[_currentFrameIndex].positionView;
+	positionInfo.sampler = VK_NULL_HANDLE;
+
 	VkDescriptorSet sets[] = { _postProcessDescriptorSets[_currentFrameIndex]};
 	VGM::DescriptorSetUpdater::begin(sets)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo, 1, 0, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &radianceInfo, nullptr, 1, 0, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, velocityHistoryInfos.data(), nullptr, _historyLength, 0, 2)
+		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &positionInfo, nullptr, 1, 0, 3)
+		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &normalInfo, nullptr, 1, 0, 4)
 		.updateDescriptorSet(_vulkan._device);
 }
 
@@ -945,6 +958,18 @@ void Raytracer::executeRaytracePass()
 			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
+		currentGBuffer->normalBuffer.cmdTransitionLayout(raytraceCmd->get(), subresource,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+			VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+		currentGBuffer->positionBuffer.cmdTransitionLayout(raytraceCmd->get(), subresource,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+			VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
 		raytraceCmd->end();
 
 		VK_CHECK(raytraceCmd->submit(nullptr, 0, nullptr, 0, nullptr, raytraceFence, _vulkan._computeQueue));
@@ -1048,7 +1073,7 @@ void Raytracer::executePostProcessPass()
 
 	_colorMapingShader.cmdBind(postProcessCmd->get());
 	vkCmdBindDescriptorSets(postProcessCmd->get(), VK_PIPELINE_BIND_POINT_COMPUTE, _postProcessPipelineLayout, 0, std::size(sets), sets, 0, nullptr);
-	vkCmdDispatch(postProcessCmd->get(), nativeWidth / 16, nativeHeight / 16, 1);
+	vkCmdDispatch(postProcessCmd->get(), nativeWidth * 2 / 16, nativeHeight * 2 / 16, 1);
 
 	presentBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 	presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -1384,8 +1409,13 @@ void Raytracer::initGBufferShader()
 	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment, 
+
+	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = { colorBlendAttachment, colorBlendAttachment, colorBlendAttachment,
 		colorBlendAttachment, colorBlendAttachment, colorBlendAttachment };
+
+	colorBlendAttachment.blendEnable = VK_FALSE;
+	colorBlendAttachments[5] = colorBlendAttachment;
+	
 
 	configurator.setRenderingFormats(renderingColorFormats, VK_FORMAT_D32_SFLOAT, VK_FORMAT_UNDEFINED);
 	configurator.setViewportState(nativeWidth, nativeHeight, 0.0f, 1.0f, 0.0f, 0.0f);

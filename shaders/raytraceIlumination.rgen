@@ -123,7 +123,7 @@ void main()
 
       vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(s) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
-      
+
       float radius = pointLightBuffer.pointLights[i].radius;
       vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, noise.y));
       

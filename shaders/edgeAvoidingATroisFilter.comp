@@ -21,7 +21,7 @@ layout(set = 0, binding = 0) uniform RenderBuffer{
 } globalDrawData;
 
 layout(set = 0, binding = 1, rgba32f) uniform readonly image3D radianceHistory;
-layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[2];
+layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[8];
 layout(set = 0, binding = 3, rgba32f) uniform readonly image2D position; 
 layout(set = 0, binding = 4, rgba32f) uniform readonly image2D normal; 
 layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
@@ -29,9 +29,18 @@ layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
 layout(set = 1, binding = 0, rgba32f) uniform readonly image2D inputImage;
 layout(set = 1, binding = 1, rgba32f) uniform writeonly image2D outputImage; 
 
+float edgeStopping(vec3 p, vec3 q, float sigma)
+{
+    return exp(-(length(p - q) / (sigma * sigma)));
+}
+
 void main()
 {
-    const float weights[5] = float[5](0.0625, 0.25, 0.375, 0.25, 0.0625);
+    const float weights[25] = float[25](0.0625, 0.0625, 0.0625, 0.0625, 0.0625,
+                                        0.0625, 0.25, 0.25, 0.25, 0.0625,
+                                        0.0625,  0.25, 0.375, 0.25, 0.0625,
+                                        0.0625, 0.25, 0.25, 0.25, 0.0625,
+                                        0.0625, 0.0625, 0.0625, 0.0625, 0.0625);
 
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);	
     vec4 c = vec4(0.0);
@@ -44,12 +53,20 @@ void main()
         for(int j = 0; j<5; j++)
         {
             int yStart = coord.y - 2 * distance;
-            for(int j = 0; j<5; j++)
+            for(int m = 0; m<5; m++)
             {
                 xStart = clamp(xStart, 0, int(globalDrawData.nativeResolutionWidth)); 
                 yStart = clamp(yStart, 0, int(globalDrawData.nativeResolutionHeight)); 
                 ivec2 uv = ivec2(xStart, yStart);
-                c = c + imageLoad(inputImage, ivec2(uv)) * 1/25.0; 
+                
+                float wrt = edgeStopping(imageLoad(inputImage, ivec2(coord)).xyz, imageLoad(inputImage, ivec2(uv)).xyz, 1);
+                float wx = edgeStopping(imageLoad(position, ivec2(coord)).xyz, imageLoad(position, ivec2(uv)).xyz, 1);
+                float wn = edgeStopping(imageLoad(normal, ivec2(coord)).xyz, imageLoad(normal, ivec2(uv)).xyz, 1);
+                
+                float w = wrt * wx * wn;
+                float k = weights[(i * 5) + m] * w;
+
+                c = c + (imageLoad(inputImage, ivec2(uv)) * weights[(i * 5) + m] * w / k); 
                 yStart = yStart + distance;
             } 
             xStart = xStart + distance;
@@ -57,7 +74,7 @@ void main()
         
     }
 
-    c = c / 5.0;
+    /* c = c / 5.0; */
 
     imageStore(outputImage, coord, c);
 }
