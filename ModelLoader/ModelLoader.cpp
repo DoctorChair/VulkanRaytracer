@@ -27,10 +27,12 @@ ModelData ModelLoader::loadModel(const std::string& path)
 			std::unordered_map<std::string, TextureData> normalTextures;
 			std::unordered_map<std::string, TextureData> metallicTextures;
 			std::unordered_map<std::string, TextureData> roughnessTextures;
+			std::unordered_map<std::string, TextureData> emissionTextures;
 			std::thread diffuseLoadThread(TextureLoader(), scene, root, aiTextureType_DIFFUSE, &diffuseTextures);
 			std::thread normalLoadThread(TextureLoader(), scene, root, aiTextureType_NORMALS, &normalTextures);
 			std::thread metallicLoadThread(TextureLoader(), scene, root, aiTextureType_METALNESS, &metallicTextures);
 			std::thread roughnessoadThread(TextureLoader(), scene, root, aiTextureType_DIFFUSE_ROUGHNESS, &roughnessTextures);
+			std::thread emissionThread(TextureLoader(), scene, root, aiTextureType_EMISSIVE, &emissionTextures);
 
 			aiMatrix4x4 t = scene->mRootNode->mTransformation;
 			glm::mat4 matrix;
@@ -45,11 +47,13 @@ ModelData ModelLoader::loadModel(const std::string& path)
 			normalLoadThread.join();
 			metallicLoadThread.join();
 			roughnessoadThread.join();
+			emissionThread.join();
 
 			_loadedTextures.merge(diffuseTextures);
 			_loadedTextures.merge(normalTextures);
 			_loadedTextures.merge(metallicTextures);
 			_loadedTextures.merge(roughnessTextures);
+			_loadedTextures.merge(emissionTextures);
 		}
 		else
 		{
@@ -169,6 +173,12 @@ MeshData ModelLoader::copyMeshData(aiMesh* mesh, const aiScene* scene, const std
 	if (subpath != "")
 	{
 		meshData.material.roughness = std::filesystem::path(subpath).filename().string();
+	}
+
+	subpath = getTextureSubPath(material, aiTextureType_EMISSIVE);
+	if (subpath != "")
+	{
+		meshData.material.emission = std::filesystem::path(subpath).filename().string();
 	}
 
 	meshData.name = mesh->mName.C_Str();

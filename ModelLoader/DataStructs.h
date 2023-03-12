@@ -11,6 +11,7 @@ struct pbrMaterialData
 	std::string metallic;
 	std::string normal;
 	std::string roughness;
+	std::string emission;
 };
 
 struct TextureData
