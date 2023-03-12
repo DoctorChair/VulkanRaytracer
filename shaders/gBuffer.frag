@@ -20,9 +20,10 @@ layout (location = 11) in vec4 currentProjectionSpacePosition;
 layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outRoughnessMetallness;
-layout (location = 3) out float outID;
-layout (location = 4) out vec4 outPosition;
+layout (location = 3) out vec4 outPosition;
+layout (location = 4) out vec4 outEmission;
 layout (location = 5) out vec4 outVelocity;
+
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 viewMatrix;
@@ -51,13 +52,15 @@ void main()
 	uint normalIndex = drawData.instanceData[instanceIndex].material.normalIndex;
 	uint metallicIndex = drawData.instanceData[instanceIndex].material.metallicIndex;
 	uint roughnessIndex = drawData.instanceData[instanceIndex].material.roughnessIndex;
+	uint emissionIndex = drawData.instanceData[instanceIndex].material.emissionIndex;
 
 	//return color
 	vec4 color = texture(sampler2D(textures[albedoIndex], albedoSampler), TexCoords0);
 	vec4 normal = texture(sampler2D(textures[normalIndex], normalSampler), TexCoords0);
 	vec4 metallic = texture(sampler2D(textures[metallicIndex], metallicSampler), TexCoords0);
 	vec4 roughness = texture(sampler2D(textures[roughnessIndex], roughnessSampler), TexCoords0);
-	
+	vec4 emission = texture(sampler2D(textures[emissionIndex], roughnessSampler), TexCoords0);
+
 	mat3 tbnMatrix = mat3(T, -B, N);
 	
 	normal.xyz = normalize(normal.xyz * 2.0 - 1.0); 
@@ -70,9 +73,9 @@ void main()
 
 	outColor = color;
 
-	outID = (float(ID));
-
 	outPosition = position;
+
+	outEmission = emission;
 	
 	vec3 previous = (vec3(previousProjectionSpacePosition.xyz / previousProjectionSpacePosition.w)) * 0.5 + 0.5;
 	vec3 current = (vec3(currentProjectionSpacePosition.xyz / currentProjectionSpacePosition.w)) * 0.5 + 0.5;

@@ -37,6 +37,8 @@ int main(int argc, char* argv[])
 
 	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
 
+	ModelData pointSource = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\LightSources\\\LavaBall.gltf");
+
 	int i = 0;
 
 	std::vector<Mesh> testScene;
@@ -72,22 +74,37 @@ int main(int argc, char* argv[])
 		instances.back().transform = m.transform;
 	}
 
+	MeshInstance pointLightInstance;
+	raytracer.loadMesh(pointSource.meshes[0].vertices, pointSource.meshes[0].indices, pointSource.meshes[0].name);
+	pointLightInstance = raytracer.getMeshInstance(pointSource.meshes[0].name);
+	TextureData* data = loader.getTextureData(pointSource.meshes[0].material.albedo);
+	pointLightInstance.material.albedoIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.albedo);
+	data = loader.getTextureData(pointSource.meshes[0].material.normal);
+	pointLightInstance.material.normalIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.normal);
+	data = loader.getTextureData(pointSource.meshes[0].material.roughness);
+	pointLightInstance.material.roughnessIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.roughness);
+	data = loader.getTextureData(pointSource.meshes[0].material.metallic);
+	pointLightInstance.material.metallicIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.metallic);
+	data = loader.getTextureData(pointSource.meshes[0].material.emission);
+	pointLightInstance.material.emissionIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.emission);
+
 	loader.freeAssets();
 
 	PointLight point = {};
-	point.diameter = 0.2f;
+	point.radius = 0.05f;
 	point.position = glm::vec3(0.0f, 10.0f, 0.0f);
 	point.color = glm::vec3(1.0f, 1.0f, 0.8f);
-	point.strength = 500.0f;
+	point.strength = 5000.0f;
+	point.emissionIndex = 2;
 
 	PointLight point2 = {};
-	point2.diameter = 0.2f;
+	point2.radius = 0.2f;
 	point2.position = glm::vec3(0.0f, 8.0f, 0.0f);
 	point2.color = glm::vec3(1.0f, 1.0f, 0.8f);
 	point2.strength = 50.0f;
 
 	PointLight point3 = {};
-	point3.diameter = 0.2f;
+	point3.radius = 0.2f;
 	point3.position = glm::vec3(0.0f, 6.0f, 0.0f);
 	point3.color = glm::vec3(1.0f, 1.0f, 0.8f);
 	point3.strength = 50.0f;
@@ -100,6 +117,12 @@ int main(int argc, char* argv[])
 	SpotLight spot = {};
 
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
+
+	PointLightSourceInstance p;
+	p.position = glm::vec3(0.0f, 10.0f, 0.0f);
+	p.radius = 0.05f;
+	p.strength = 5000.0f;
+	p.lightModel = pointLightInstance;
 
 	CameraController camera(2.0f, 20.0f, 90.0f, 1920.0f/1080.0f, 0.1f, 100.0f, up);
 	
@@ -194,11 +217,11 @@ int main(int argc, char* argv[])
 		for(unsigned int i = 0; i<testScene.size(); i++)
 		{
 			instances[i].previousTransform = instances[i].transform;
-			raytracer.drawMeshInstance(instances[i], instances[i].transform);
+			raytracer.drawMeshInstance(instances[i], 0x01);
 			id++;
 		}
 		
-		raytracer.drawPointLight(point);
+		raytracer.drawPointLight(p);
 		/*raytracer.drawPointLight(point2);
 		raytracer.drawPointLight(point3);*/
 		raytracer.drawSpotLight(spot);

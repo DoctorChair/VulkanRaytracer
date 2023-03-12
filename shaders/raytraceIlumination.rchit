@@ -155,7 +155,7 @@ void main()
 	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], normalSampler), texCoord);
 	vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], metallicSampler), texCoord);
     vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], roughnessSampler), texCoord);
-    
+    vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], roughnessSampler), texCoord);
 	vec3 normal = tbnMatrix * normalTexture.xyz;
 	normal = normalize(normal);
 
@@ -185,7 +185,7 @@ void main()
 
 			traceRayEXT(topLevelAS, // acceleration structure
     	    shadowRayFlags,       // rayFlags
-    	    0xFF,           // cullMask
+    	    0x01,           // cullMask
     	    0,              // sbtRecordOffset
     	    0,              // sbtRecordStride
     	    1,              // missIndex
@@ -196,7 +196,8 @@ void main()
     	    0               // payload (location = 0)
     	    );
 
-			vec3 lightColor = normalize(pointLightBuffer.pointLights[i].color.xyz);
+			vec2 sphereUV = vec2(atan(-lightDirection.x, -lightDirection.z) / (2*M_PI) + 0.5, -lightDirection.y * 0.5 + 0.5);
+      		vec4 lightEmission = texture(sampler2D(textures[pointLightBuffer.pointLights[i].emissionIndex], roughnessSampler), sphereUV); 
 
 			float attenuation = 1.0/max((distance*distance), 0.001);
 
@@ -204,7 +205,7 @@ void main()
 
 		    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
-			vec3 lightRadiance = lightColor * pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload * area;
+			vec3 lightRadiance = lightEmission.xyz * pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload * area;
 
 			radiance = radiance + brdf * lightRadiance;
 		}
@@ -218,7 +219,7 @@ void main()
 
 		traceRayEXT(topLevelAS, // acceleration structure
         shadowRayFlags,       // rayFlags
-        0xFF,           // cullMask
+        0x01,           // cullMask
         0,              // sbtRecordOffset
         0,              // sbtRecordStride
         1,              // missIndex
@@ -260,7 +261,7 @@ void main()
     	float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
 
     	float weight = veachBalanceHeuristik(pdfValue, ggxPdfValue);
-    	vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
+    	vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
 
 		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
 
@@ -293,17 +294,13 @@ void main()
     
     	float pdfValue = ggxImportancePDF(noise.x, roughness);
     	float lambertPDFValue =  lambertImportancePDF(noise.x);
-    	
-		vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
 
 		pdfValue = max(pdfValue, 0.001);
     	float weight = veachBalanceHeuristik(pdfValue ,lambertPDFValue);
 
-		vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, noise.y);
+		vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
 
     	vec3 reflectionDirection = reflect(-gl_WorldRayDirectionEXT, halfwayVector);
-
-		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
 
 		traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
@@ -333,6 +330,7 @@ void main()
 	}
 	} 
 
-	
+	radiance = radiance + emissionTexture.xyz;
+
 	incomigPayload.radiance = radiance / 2.0;
 }

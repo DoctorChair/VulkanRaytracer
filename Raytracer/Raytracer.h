@@ -49,12 +49,12 @@ struct GBuffer
 	VkImageView positionView;
 	VGM::Texture normalBuffer;
 	VkImageView normalView;
-	VGM::Texture idBuffer;
-	VkImageView idView;
 	VGM::Texture depthBuffer;
 	VkImageView depthView;
 	VGM::Texture roughnessMetalnessBuffer;
 	VkImageView roughnessMetalnessView;
+	VGM::Texture emissionBuffer;
+	VkImageView emissionView;
 };
 
 struct DefferedBuffer
@@ -112,6 +112,7 @@ struct Material
 	uint32_t metallicIndex = 0;
 	uint32_t normalIndex = 0;
 	uint32_t roughnessIndex = 0;
+	uint32_t emissionIndex = 0;
 };
 
 struct Mesh
@@ -142,7 +143,6 @@ struct DrawData
 	uint32_t ID;
 	uint32_t vertexOffset;
 	uint32_t indicesOffset;
-	uint32_t padding;
 };
 
 struct Model
@@ -205,12 +205,16 @@ struct SunLight
 	float strength;
 };
 
+
+
 struct PointLight
 {
 	glm::vec3 position;
-	float diameter;
+	float radius;
 	glm::vec3 color;
 	float strength;
+	uint32_t emissionIndex;
+	uint32_t padding[3];
 };
 
 struct SpotLight
@@ -220,6 +224,15 @@ struct SpotLight
 	float openingAngle;
 	glm::vec4 color;
 	float strength;
+};
+
+struct PointLightSourceInstance
+{
+	glm::vec3 position;
+	float radius;
+	glm::vec3 color;
+	float strength;
+	MeshInstance lightModel;
 };
 
 struct PostProcessLeapfrogBuffer
@@ -244,12 +257,12 @@ public:
 	void uploadTextures();
 
 	//update tlas and place draw call;
-	void drawMeshInstance(MeshInstance instance, glm::mat4 transform);
+	void drawMeshInstance(MeshInstance instance, uint32_t cullMask);
 	void setNoiseTextureIndex(uint32_t index);
 
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
-	void drawPointLight(PointLight light);
+	void drawPointLight(PointLightSourceInstance light);
 	void drawSpotLight(SpotLight light);
 	void setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position);
 	void update();
@@ -278,6 +291,8 @@ private:
 	void initPresentFramebuffers();
 	void initTextureArrays();
 	void initShaderBindingTable();
+
+	void initBufferState();
 
 	void loadPlaceholderMeshAndTexture();
 
@@ -322,7 +337,7 @@ private:
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 3;
-	uint32_t _sampleSequenceLength = 8;
+	uint32_t _sampleSequenceLength = 2;
 	uint32_t _historyLength = 8;
 
 	uint32_t nativeWidth = 1920/2;

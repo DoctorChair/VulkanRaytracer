@@ -94,9 +94,6 @@ void main()
     for(uint i = 1; i<globalDrawData.historyLength && !abort; i++)
     {	
 		uv = uv - oldH.xy;
-		
-		uv.x = clamp(uv.x, 0.0, 1.0);
-		uv.y = clamp(uv.y, 0.0, 1.0);
 
 		index = index - 1 % globalDrawData.historyLength * uint(index != 0) + (globalDrawData.historyLength - 1) * uint(index == 0);   
 
@@ -104,12 +101,12 @@ void main()
 		
 		nextFrame =  loadInterpolateBilinear3D(vec3(uv, index), imageDimesions);
 
-		if(oldH.z == newH.z)
+		if(oldH.z == newH.z && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0)
 		{
-		radiance = radiance + nextFrame;
+			radiance = radiance + nextFrame;
 		}
 
-		abort = !(oldH.z == newH.z);
+		abort = !(oldH.z == newH.z && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0);
 		count++;
 		oldH = newH;
     }

@@ -11,6 +11,7 @@ struct PointLight
 	float radius;
 	vec3 color;
 	float strength;
+	uint emissionIndex;
 };
 
 struct SpotLight
@@ -27,7 +28,8 @@ struct Material
 	uint albedoIndex;
 	uint metallicIndex;
 	uint normalIndex;
-	uint roughnessIndex;	
+	uint roughnessIndex;
+	uint emissionIndex;	
 };
 
 struct drawInstanceData
@@ -47,3 +49,21 @@ struct Vertex
 	vec4 tangent;
 	vec4 texCoordPair;
 };
+
+vec3 calculateSphereHitPoint(vec3 lineOrigin, vec3 lineDirection, vec3 spherePosition, float radius)
+{
+	float hitVal = pow(dot(lineDirection, spherePosition - lineOrigin), 2.0) - (pow(length(spherePosition - lineOrigin), 2.0) - pow(radius, 2.0));
+
+	if(hitVal >= 0)
+	{
+		float t1 = -(dot(lineDirection, (lineOrigin - spherePosition))) + hitVal;
+		float t2 = -(dot(lineDirection, (lineOrigin - spherePosition))) - hitVal;
+
+		vec3 a = lineDirection * t1;
+		vec3 b = lineDirection * t2;
+
+		return a * float(length(lineOrigin - a) <= length(lineOrigin - b)) + b * float(length(lineOrigin - b) <= length(lineOrigin - a));
+	}
+
+	return vec3(0.0, 0.0, 0.0);
+}
