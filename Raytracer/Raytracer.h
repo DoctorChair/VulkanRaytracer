@@ -305,6 +305,8 @@ private:
 	void updateGBufferFramebufferBindings();
 	void updateCompositingFramebufferBindings();
 
+	void updateDescriptorSets();
+
 	void executeDefferedPass();
 	void executeRaytracePass();
 	void executeAccumulatePass();
@@ -340,8 +342,8 @@ private:
 	uint32_t _sampleSequenceLength = 2;
 	uint32_t _historyLength = 8;
 
-	uint32_t nativeWidth = 1920/2;
-	uint32_t nativeHeight = 1080/2;
+	uint32_t nativeWidth = 1920/4;
+	uint32_t nativeHeight = 1080/4;
 
 	uint32_t _frameNumber = 0;
 

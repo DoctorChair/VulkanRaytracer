@@ -52,7 +52,7 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, "VK_EXT_depth_range_unrestricted"},
-		&features2, _concurrencyCount);
+		&features2, 3);
 
 	_windowWidth = w;
 	_windowHeight = h;
@@ -87,6 +87,8 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 	initMeshBuffer();
 	initTextureArrays();
 	loadPlaceholderMeshAndTexture();	
+
+	updateDescriptorSets();
 }
 
 void Raytracer::resizeSwapchain(uint32_t windowWidth, uint32_t windowHeight)
@@ -527,12 +529,12 @@ void Raytracer::updateGBufferDescriptorSets()
 	VkDescriptorBufferInfo globalbufferInfo;
 	globalbufferInfo.buffer = currentGlobalRenderDataBuffer->get();
 	globalbufferInfo.offset = 0;
-	globalbufferInfo.range = currentGlobalRenderDataBuffer->size();
+	globalbufferInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorBufferInfo camerabufferInfo;
 	camerabufferInfo.buffer = currentCameraBuffer->get();
 	camerabufferInfo.offset = 0;
-	camerabufferInfo.range = currentCameraBuffer->size();
+	camerabufferInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorImageInfo albedoInfo = {};
 	albedoInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -553,7 +555,7 @@ void Raytracer::updateGBufferDescriptorSets()
 	VkDescriptorBufferInfo drawDataInstanceInfo;
 	drawDataInstanceInfo.buffer = currentDrawDataInstanceBuffer->get();
 	drawDataInstanceInfo.offset = 0;
-	drawDataInstanceInfo.range = currentDrawDataInstanceBuffer->size();
+	drawDataInstanceInfo.range = VK_WHOLE_SIZE;
 
 	VkDescriptorSet sets[] = { _globalDescriptorSets[_currentFrameIndex], _gBuffer1DescripotrSets[_currentFrameIndex], _gBuffer2DescriptorSets[_currentFrameIndex]};
 
@@ -768,8 +770,8 @@ void Raytracer::executeDefferedPass()
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&_globalRenderData, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
 
-	updateGBufferDescriptorSets();
-	updateDefferedDescriptorSets();
+	/*updateGBufferDescriptorSets();
+	updateDefferedDescriptorSets();*/
 
 	updateGBufferFramebufferBindings();
 
@@ -897,8 +899,6 @@ void Raytracer::executeDefferedPass()
 	_spotLightTransferCache.clear();
 	_drawCommandTransferCache.clear();
 	_drawDataTransferCache.clear();
-	
-	
 }
 
 void Raytracer::executeRaytracePass()
@@ -981,12 +981,12 @@ void Raytracer::executeRaytracePass()
 		currentGBuffer->positionBuffer.cmdTransitionLayout(raytraceCmd->get(), subresource,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
 			VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
 			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 		raytraceCmd->end();
 
-		VK_CHECK(raytraceCmd->submit(nullptr, 0, nullptr, 0, nullptr, raytraceFence, _vulkan._computeQueue));
+		VK_CHECK(raytraceCmd->submit(&_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1, nullptr, 0, nullptr, raytraceFence, _vulkan._computeQueue));
 
 		_accelerationStructure._instanceTransferCache.clear();
 	
@@ -1004,7 +1004,7 @@ void Raytracer::executePostProcessPass()
 
 	postProcessCmd->begin(&currentFence, 1, _vulkan._device);
 	
-	updatePostProcessDescriptorSets();
+	/*updatePostProcessDescriptorSets();*/
 
 	VkDescriptorSet sets[] =
 	{
@@ -1087,7 +1087,7 @@ void Raytracer::executePostProcessPass()
 
 	_colorMapingShader.cmdBind(postProcessCmd->get());
 	vkCmdBindDescriptorSets(postProcessCmd->get(), VK_PIPELINE_BIND_POINT_COMPUTE, _postProcessPipelineLayout, 0, std::size(sets), sets, 0, nullptr);
-	vkCmdDispatch(postProcessCmd->get(), nativeWidth * 2 / 16, nativeHeight * 2 / 16, 1);
+	vkCmdDispatch(postProcessCmd->get(), (nativeWidth * 4) / 16, (nativeHeight * 4) / 16, 1);
 
 	presentBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 	presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -1102,7 +1102,16 @@ void Raytracer::executePostProcessPass()
 
 	postProcessCmd->end();
 	
-	VK_CHECK(postProcessCmd->submit(&currentPostProcessSemaphore, 1, nullptr, 0, nullptr, currentFence, _vulkan._computeQueue));
+	VkPipelineStageFlags waitStageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	VK_CHECK(postProcessCmd->submit(&currentPostProcessSemaphore, 1, &_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1, &waitStageFlags, currentFence, _vulkan._computeQueue));
+}
+
+void Raytracer::updateDescriptorSets()
+{
+	updateGBufferDescriptorSets();
+	updateDefferedDescriptorSets();
+	updatePostProcessDescriptorSets();
+	//updateRaytraceDescripotrSets();
 }
 
 void Raytracer::genHaltonSequence(uint32_t a, uint32_t b, uint32_t length)

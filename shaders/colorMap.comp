@@ -29,6 +29,27 @@ layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
 layout(set = 1, binding = 0, rgba32f) uniform readonly image2D inputImage;
 layout(set = 1, binding = 1, rgba32f) uniform writeonly image2D outputImage; 
 
+vec4 loadInterpolateBilinear2D(vec2 texCoord, vec2 imageDimesions)
+{
+	vec2 imageCoord = texCoord * vec2(imageDimesions);
+
+	ivec2 a = ivec2(floor(imageCoord.x), floor(imageCoord.y));
+	ivec2 b = ivec2(floor(imageCoord.x), ceil(imageCoord.y));
+	ivec2 c = ivec2(ceil(imageCoord.x), floor(imageCoord.y));
+	ivec2 d = ivec2(ceil(imageCoord.x), ceil(imageCoord.y));
+
+	vec4 A = imageLoad(inputImage, a);
+	vec4 B = imageLoad(inputImage, b);
+	vec4 C = imageLoad(inputImage, c);
+	vec4 D = imageLoad(inputImage, d);
+
+	vec4 colorA = mix(A, B, imageCoord.y - floor(imageCoord.y));
+	vec4 colorb = mix(C, D, imageCoord.y - floor(imageCoord.y));
+	vec4 result = mix(colorA, colorb, imageCoord.x - floor(imageCoord.x));
+
+	return result;
+}
+
 void main()
 {
 
@@ -36,10 +57,14 @@ void main()
     const float exposure = 2.5;
 
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-    vec3 hdrColor = imageLoad(inputImage, coord).xyz;
+	vec2 uv = vec2(coord) / vec2(globalDrawData.nativeResolutionWidth*4, globalDrawData.nativeResolutionHeight*4);
+
+    vec3 hdrColor = loadInterpolateBilinear2D(uv,  vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight)).xyz;
     
     vec3 mapped = vec3(1.0) - exp(-hdrColor * exposure);
     mapped = pow(mapped, vec3(1.0 / gamma));
-  
-    imageStore(outputImage, coord * 2, vec4(mapped, 1.0));
+	
+	
+
+    imageStore(outputImage, coord, vec4(mapped, 1.0));
 }
