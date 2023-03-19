@@ -22,7 +22,7 @@ layout (location = 8) out vec3 N;
 layout (location = 9) out flat uint outID;
 layout (location = 10) out vec4 outPreviousProjectionSpacePosition;
 layout (location = 11) out vec4 outCurrentProjectionSpacePosition;
-
+layout (location = 12) out flat vec3 meshNormal;
 
 layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 viewMatrix;
@@ -50,6 +50,7 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint historyIndex;
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
+	uint environmentTextureIndex;
 } globalDrawData;
 
 
@@ -74,6 +75,8 @@ void main()
 	T = worldTangent;
 	B = worldBitagnent;
 	N = worldNormal;
+
+	meshNormal = worldNormal;
 
 	instanceIndex = gl_InstanceIndex;
 

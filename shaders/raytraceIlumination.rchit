@@ -34,6 +34,7 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint historyIndex;
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
+	uint environmentTextureIndex;
 } globalDrawData;
 
 layout(set = 1, binding = 0) uniform sampler2D primaryRayColorTexture;

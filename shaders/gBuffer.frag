@@ -16,6 +16,7 @@ layout (location = 8) in vec3 N;
 layout (location = 9) in flat uint ID;
 layout (location = 10) in vec4 previousProjectionSpacePosition;
 layout (location = 11) in vec4 currentProjectionSpacePosition;
+layout (location = 12) in flat vec3 meshNormal;
 //output write
 layout (location = 0) out vec4 outColor;
 layout (location = 1) out vec4 outNormal;
@@ -45,6 +46,20 @@ layout(std430, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 } drawData;
 
 layout(set = 3, binding = 0) uniform texture2D textures[1024]; 
+
+float encodeRGBtoFloat( vec3 rgb ) 
+{
+	rgb = normalize(rgb);
+	
+	int x = int(floor(rgb.x * 255.0));
+	int y = int(floor(rgb.y * 255.0)) * int(256);
+	int z = int(floor(rgb.z * 255.0)) * int(65536);
+
+	int packed = x + y + z;
+
+  	return float(packed);
+}
+
 
 void main()
 {

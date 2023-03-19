@@ -18,10 +18,14 @@ int main(int argc, char* argv[])
 
 	TextureLoader textureLoader;
 	TextureData noiseTexture = textureLoader.loadTexture("C:\\Users\\Eric\\projects\\textures\\FreeBlueNoiseTextures\\Data\\1024_1024\\LDR_RGBA_0.png");
-	
+	TextureData environmentTexture = textureLoader.loadTexture("C:\\Users\\Eric\\projects\\textures\\evening_meadow_4k.hdr");
+
 	uint32_t noiseTexureIndex = raytracer.loadTexture(noiseTexture.pixels, noiseTexture.width, noiseTexture.height, noiseTexture.nrChannels, "blueNoiseSampleTexture");
 
+	uint32_t environmentTextureIndex = raytracer.loadTexture(environmentTexture.pixels, environmentTexture.width, environmentTexture.height, environmentTexture.nrChannels, "environmentMapTexture");
+
 	raytracer.setNoiseTextureIndex(noiseTexureIndex);
+	raytracer.setEnvironmentTextureIndex(environmentTextureIndex);
 
 	ModelLoader loader;
 	

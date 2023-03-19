@@ -794,7 +794,7 @@ void Raytracer::executeDefferedPass()
 	_cameraBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
 	_globalRenderDataBuffers[_currentFrameIndex].cmdMemoryBarrier(defferedCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 0);
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0);
 
 	VkImageSubresourceRange subresource;
 	subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1087,7 +1087,7 @@ void Raytracer::executePostProcessPass()
 
 	_colorMapingShader.cmdBind(postProcessCmd->get());
 	vkCmdBindDescriptorSets(postProcessCmd->get(), VK_PIPELINE_BIND_POINT_COMPUTE, _postProcessPipelineLayout, 0, std::size(sets), sets, 0, nullptr);
-	vkCmdDispatch(postProcessCmd->get(), (nativeWidth * 4) / 16, (nativeHeight * 4) / 16, 1);
+	vkCmdDispatch(postProcessCmd->get(), (nativeWidth * 2) / 16, (nativeHeight * 2) / 16, 1);
 
 	presentBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 	presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -1102,7 +1102,9 @@ void Raytracer::executePostProcessPass()
 
 	postProcessCmd->end();
 	
-	VkPipelineStageFlags waitStageFlags = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	vkDeviceWaitIdle(_vulkan._device);
+
+	VkPipelineStageFlags waitStageFlags = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 	VK_CHECK(postProcessCmd->submit(&currentPostProcessSemaphore, 1, &_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1, &waitStageFlags, currentFence, _vulkan._computeQueue));
 }
 
@@ -1163,7 +1165,10 @@ void Raytracer::initHistoryBuffers()
 	_historyBuffer.radianceHistory.createImageView(0, 1, 0, 1, _vulkan._device, &_historyBuffer.radianceView);
 }
 
-
+void Raytracer::setEnvironmentTextureIndex(uint32_t index)
+{
+	_globalRenderData.environmentTextureIndex = index;
+}
 
 void Raytracer::updateGBufferFramebufferBindings()
 {
@@ -1310,12 +1315,12 @@ void Raytracer::initDescriptorSetLayouts()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
 			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
-			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_globalLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
-			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
 			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
@@ -1340,8 +1345,8 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_lightLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
-			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, _maxTextureCount)
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT 
+			| VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, _maxTextureCount)
 		.createDescriptorSetLayout(_vulkan._device, &_textureLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1584,7 +1589,6 @@ void Raytracer::initSyncStructures()
 	eventCreateInfo.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
 	eventCreateInfo.pNext = nullptr;
 	eventCreateInfo.flags = 0;
-
 
 	_frameSynchroStructs.resize(_concurrencyCount);
 	for (unsigned int i = 0; i < _concurrencyCount; i++)

@@ -18,6 +18,7 @@ layout(set = 0, binding = 0) uniform RenderBuffer{
 	uint historyIndex;
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
+	uint environmentTextureIndex;
 } globalDrawData;
 
 layout(set = 0, binding = 1, rgba32f) uniform readonly image3D radianceHistory;
@@ -100,13 +101,15 @@ void main()
 		newH = loadInterpolateBilinear2D(vec3(uv, index), imageDimesions);
 		
 		nextFrame =  loadInterpolateBilinear3D(vec3(uv, index), imageDimesions);
+		
+		bool condition = int(oldH.z) == int(newH.z) && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
 
-		if(oldH.z == newH.z && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0)
+		if(condition)
 		{
 			radiance = radiance + nextFrame;
 		}
 
-		abort = !(oldH.z == newH.z && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0);
+		abort = !condition;
 		count++;
 		oldH = newH;
     }

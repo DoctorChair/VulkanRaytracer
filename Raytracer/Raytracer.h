@@ -167,6 +167,7 @@ struct GlobalRenderData
 	uint32_t historyIndex;
 	uint32_t nativeResolutionWidth;
 	uint32_t nativeResolutionHeight;
+	uint32_t environmentTextureIndex;
 };
 
 struct CameraData
@@ -194,6 +195,7 @@ struct FrameSynchro
 	VkFence _postProcessFence;
 
 	VkEvent _defferedFinishedEvent;
+
 	VkEvent _raytraceFinishedEvent;
 };
 
@@ -259,6 +261,7 @@ public:
 	//update tlas and place draw call;
 	void drawMeshInstance(MeshInstance instance, uint32_t cullMask);
 	void setNoiseTextureIndex(uint32_t index);
+	void setEnvironmentTextureIndex(uint32_t index);
 
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
 	void drawSunLight(SunLight light);
@@ -342,8 +345,8 @@ private:
 	uint32_t _sampleSequenceLength = 2;
 	uint32_t _historyLength = 8;
 
-	uint32_t nativeWidth = 1920/4;
-	uint32_t nativeHeight = 1080/4;
+	uint32_t nativeWidth = 1920/2;
+	uint32_t nativeHeight = 1080/2;
 
 	uint32_t _frameNumber = 0;
 

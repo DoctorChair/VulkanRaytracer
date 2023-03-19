@@ -18,6 +18,7 @@ layout(set = 0, binding = 0) uniform RenderBuffer{
 	uint historyIndex;
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
+	uint environmentTextureIndex;
 } globalDrawData;
 
 layout(set = 0, binding = 1, rgba32f) uniform readonly image3D radianceHistory;
@@ -54,10 +55,10 @@ void main()
 {
 
     const float gamma = 2.2;
-    const float exposure = 2.5;
+    const float exposure = 1.5;
 
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-	vec2 uv = vec2(coord) / vec2(globalDrawData.nativeResolutionWidth*4, globalDrawData.nativeResolutionHeight*4);
+	vec2 uv = vec2(coord) / vec2(globalDrawData.nativeResolutionWidth*2, globalDrawData.nativeResolutionHeight*2);
 
     vec3 hdrColor = loadInterpolateBilinear2D(uv,  vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight)).xyz;
     
