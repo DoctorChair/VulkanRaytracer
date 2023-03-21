@@ -299,6 +299,8 @@ private:
 
 	void loadPlaceholderMeshAndTexture();
 
+	void initSamplers();
+
 	void updateGBufferDescriptorSets();
 	void updateDefferedDescriptorSets();
 	void updateRaytraceDescripotrSets();
@@ -401,6 +403,8 @@ private:
 
 	std::vector<FrameSynchro> _frameSynchroStructs;
 	
+	VkSampler _linearSampler;
+	VkSampler _nearestNeighborSampler;
 
 	std::vector<VGM::Buffer> _cameraBuffers;
 	std::vector<VGM::Buffer> _globalRenderDataBuffers;
@@ -432,9 +436,9 @@ private:
 	VGM::DescriptorSetAllocator _postProcessDescriptorSetAllocator;
 
 	VkDescriptorSetLayout _globalLayout;
-	VkDescriptorSetLayout _gBufferLayout1;
+	VkDescriptorSetLayout _drawInstanceLayout;
 
-	VkDescriptorSetLayout _gBufferLayout2;
+	VkDescriptorSetLayout _samplerLayout;
 
 	VkDescriptorSetLayout _textureLayout;
 
@@ -448,8 +452,8 @@ private:
 
 	std::vector<VkDescriptorSet> _globalDescriptorSets;
 
-	std::vector<VkDescriptorSet> _gBuffer1DescripotrSets;
-	std::vector<VkDescriptorSet> _gBuffer2DescriptorSets;
+	std::vector<VkDescriptorSet> _drawInstanceDescriptorSets;
+	std::vector<VkDescriptorSet> _samplerDescriptorSets;
 
 	std::vector<VkDescriptorSet> _textureDescriptorSets;
 

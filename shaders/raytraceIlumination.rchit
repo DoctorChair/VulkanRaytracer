@@ -74,10 +74,8 @@ layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
 	SpotLight spotLights[];
 } spotLightBuffer; 
 
-layout(set = 4, binding = 0) uniform sampler albedoSampler;
-layout(set = 4, binding = 1) uniform sampler metallicSampler;
-layout(set = 4, binding = 2) uniform sampler normalSampler;
-layout(set = 4, binding = 3) uniform sampler roughnessSampler;
+layout(set = 4, binding = 0) uniform sampler linearSampler;
+layout(set = 4, binding = 1) uniform sampler nearestSampler;
 
 layout(std430, set = 5, binding = 0) readonly buffer DrawInstanceBuffer{
 	drawInstanceData instanceData[];
@@ -152,11 +150,11 @@ void main()
 	float tMin = 0.01;
 	float tMax = 1000.0;
 
-	vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], albedoSampler), texCoord);
-	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], normalSampler), texCoord);
-	vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], metallicSampler), texCoord);
-    vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], roughnessSampler), texCoord);
-    vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], roughnessSampler), texCoord);
+	vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], linearSampler), texCoord);
+	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], linearSampler), texCoord);
+	vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], linearSampler), texCoord);
+    vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], linearSampler), texCoord);
+    vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], linearSampler), texCoord);
 	vec3 normal = tbnMatrix * normalTexture.xyz;
 	normal = normalize(normal);
 
@@ -168,7 +166,7 @@ void main()
 	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
 
 	vec2 offset = vec2(gl_LaunchIDEXT.xy) / vec2(1920, 1080);
-	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), offset);
+	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), offset);
 
 	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth)
 	{
@@ -198,7 +196,7 @@ void main()
     	    );
 
 			vec2 sphereUV = vec2(atan(-lightDirection.x, -lightDirection.z) / (2*M_PI) + 0.5, -lightDirection.y * 0.5 + 0.5);
-      		vec4 lightEmission = texture(sampler2D(textures[pointLightBuffer.pointLights[i].emissionIndex], roughnessSampler), sphereUV); 
+      		vec4 lightEmission = texture(sampler2D(textures[pointLightBuffer.pointLights[i].emissionIndex], linearSampler), sphereUV); 
 
 			float attenuation = 1.0/max((distance*distance), 0.001);
 
@@ -255,7 +253,7 @@ void main()
 
 		uint index = i % globalDrawData.sampleSequenceLength;
     	
-		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
       	/ vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
     
     	float pdfValue = lambertImportancePDF(noise.x);
@@ -290,7 +288,7 @@ void main()
 
 		uint index = i % globalDrawData.sampleSequenceLength;
     	
-		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
       	/ vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
     
     	float pdfValue = ggxImportancePDF(noise.x, roughness);

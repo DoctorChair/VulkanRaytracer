@@ -36,10 +36,8 @@ layout(set = 0, binding = 0) uniform  CameraBuffer{
 	mat4 previousViewMatrix;
 } cameraData;
 
-layout(set = 1, binding = 0) uniform sampler albedoSampler;
-layout(set = 1, binding = 1) uniform sampler metallicSampler;
-layout(set = 1, binding = 2) uniform sampler normalSampler;
-layout(set = 1, binding = 3) uniform sampler roughnessSampler;
+layout(set = 1, binding = 0) uniform sampler linearSampler;
+layout(set = 1, binding = 1) uniform sampler nearestSampler;
 
 layout(std430, set = 2, binding = 0) readonly buffer DrawInstanceBuffer{
 	drawInstanceData instanceData[];
@@ -70,11 +68,11 @@ void main()
 	uint emissionIndex = drawData.instanceData[instanceIndex].material.emissionIndex;
 
 	//return color
-	vec4 color = texture(sampler2D(textures[albedoIndex], albedoSampler), TexCoords0);
-	vec4 normal = texture(sampler2D(textures[normalIndex], normalSampler), TexCoords0);
-	vec4 metallic = texture(sampler2D(textures[metallicIndex], metallicSampler), TexCoords0);
-	vec4 roughness = texture(sampler2D(textures[roughnessIndex], roughnessSampler), TexCoords0);
-	vec4 emission = texture(sampler2D(textures[emissionIndex], roughnessSampler), TexCoords0);
+	vec4 color = texture(sampler2D(textures[albedoIndex], linearSampler), TexCoords0);
+	vec4 normal = texture(sampler2D(textures[normalIndex], linearSampler), TexCoords0);
+	vec4 metallic = texture(sampler2D(textures[metallicIndex], linearSampler), TexCoords0);
+	vec4 roughness = texture(sampler2D(textures[roughnessIndex], linearSampler), TexCoords0);
+	vec4 emission = texture(sampler2D(textures[emissionIndex], linearSampler), TexCoords0);
 
 	mat3 tbnMatrix = mat3(T, -B, N);
 	

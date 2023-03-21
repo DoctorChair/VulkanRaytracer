@@ -61,10 +61,8 @@ layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
 	SpotLight spotLights[];
 } spotLightBuffer; 
 
-layout(set = 4, binding = 0) uniform sampler albedoSampler;
-layout(set = 4, binding = 1) uniform sampler metallicSampler;
-layout(set = 4, binding = 2) uniform sampler normalSampler;
-layout(set = 4, binding = 3) uniform sampler roughnessSampler;
+layout(set = 4, binding = 0) uniform sampler linearSampler;
+layout(set = 4, binding = 1) uniform sampler nearestSampler;
 
 layout(std430, set = 5, binding = 0) readonly buffer DrawInstanceBuffer{
 	drawInstanceData instanceData[];
@@ -105,7 +103,7 @@ void main()
     vec4 direction = cameraData.inverseViewMatrix * vec4(normalize(target.xyz), 0);
 
     vec2 sphereUV = vec2(atan(direction.x, direction.z) / (2*M_PI) + 0.5, -direction.y * 0.5 + 0.5); 
-    outColor = texture(sampler2D(textures[globalDrawData.environmentTextureIndex], albedoSampler), sphereUV);
+    outColor = texture(sampler2D(textures[globalDrawData.environmentTextureIndex], linearSampler), sphereUV);
   }
   else
   {
@@ -124,7 +122,7 @@ void main()
   
   vec2 offset = vec2(float((globalDrawData.frameNumber) % globalDrawData.historyLength)) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight));
-  vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), inUV * vec2(1920.0/1024.0, 1080.0/1024.0) + offset);
+  vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), inUV * vec2(1920.0/1024.0, 1080.0/1024.0) + offset);
   
   
   
@@ -140,7 +138,7 @@ void main()
     {
       shadowPayload = 0.0;
 
-      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(s) 
+      vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(s) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
       float radius = pointLightBuffer.pointLights[i].radius;
@@ -164,7 +162,7 @@ void main()
       );
 
       vec2 sphereUV = vec2(atan(lightNormal.x, lightNormal.z) / (2*M_PI) + 0.5, lightNormal.y * 0.5 + 0.5);
-      vec4 lightEmission = texture(sampler2D(textures[pointLightBuffer.pointLights[i].emissionIndex], roughnessSampler), sphereUV); 
+      vec4 lightEmission = texture(sampler2D(textures[pointLightBuffer.pointLights[i].emissionIndex], linearSampler), sphereUV); 
         
       float attenuation = 1.0/(distance*distance);
 	    
@@ -218,7 +216,7 @@ void main()
     /* uint index = (i + globalDrawData.frameNumber) % globalDrawData.sampleSequenceLength;
     vec2 noise = sampleSequence.samples[index]; */
     
-    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
     float pdfValue = lambertImportancePDF(noise.x);
@@ -258,7 +256,7 @@ void main()
     uint index = (i + globalDrawData.frameNumber) % globalDrawData.sampleSequenceLength;
     /* vec2 noise = sampleSequence.samples[index]; */
 
-    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], albedoSampler), screenNoise.xy + vec2(float(i) 
+    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
     float pdfValue = ggxImportancePDF(noise.x, roughness);
