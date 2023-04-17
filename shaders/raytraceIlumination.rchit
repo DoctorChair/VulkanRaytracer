@@ -148,7 +148,7 @@ void main()
     
 	mat3 tbnMatrix = {worldMeshTangnet, -worldMeshBitagnent, worldMeshNormal};
 	float tMin = 0.01;
-	float tMax = 1000.0;
+	float tMax = 100.0;
 
 	vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], linearSampler), texCoord);
 	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], linearSampler), texCoord);
@@ -162,10 +162,13 @@ void main()
 	float roughness = roughnessTexture.x;
 	float metallic = metallicTexture.y;
 
+	
+
 	uint  rayFlags = gl_RayFlagsOpaqueEXT;
 	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
 
 	vec2 offset = vec2(gl_LaunchIDEXT.xy) / vec2(1920, 1080);
+
 	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), offset);
 
 	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth)
@@ -247,14 +250,10 @@ void main()
 	vec3 diffuseRadiance = vec3(0.0);
 	vec3 specularRadiance = vec3(0.0);
 	
-	for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
-	{	
-		incomigPayload.depth++;
 
-		uint index = i % globalDrawData.sampleSequenceLength;
+		incomigPayload.depth++;
     	
-		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
-      	/ vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
+		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy);
     
     	float pdfValue = lambertImportancePDF(noise.x);
     	float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
@@ -279,23 +278,14 @@ void main()
 
 		diffuseRadiance = diffuseRadiance + colorTexture.xyz * cosTheta * incomigPayload.radiance * weight / pdfValue;
 
-		incomigPayload.depth--;
-	}
 
-	for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
-	{
-		incomigPayload.depth++;
-
-		uint index = i % globalDrawData.sampleSequenceLength;
-    	
-		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
-      	/ vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
+		noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.yx);
     
-    	float pdfValue = ggxImportancePDF(noise.x, roughness);
+    	pdfValue = ggxImportancePDF(noise.x, roughness);
     	float lambertPDFValue =  lambertImportancePDF(noise.x);
 
 		pdfValue = max(pdfValue, 0.001);
-    	float weight = veachBalanceHeuristik(pdfValue ,lambertPDFValue);
+    	weight = veachBalanceHeuristik(pdfValue ,lambertPDFValue);
 
 		vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
 
@@ -319,17 +309,14 @@ void main()
 		vec3 brdf = ggxSpecularBRDF(gl_WorldRayDirectionEXT, reflectionDirection, normal.xyz, colorTexture.xyz, metallic, roughness, reflectance);
 
 		specularRadiance = specularRadiance + incomigPayload.radiance * brdf * weight / pdfValue; 
-	}
 	
-	specularRadiance = specularRadiance / float(globalDrawData.maxSpecularSampleCount);
-	diffuseRadiance = diffuseRadiance / float(globalDrawData.maxDiffuseSampleCount);
 	
-	radiance = radiance + specularRadiance + diffuseRadiance; 
+	radiance = radiance + specularRadiance + diffuseRadiance;
 	
 	}
 	} 
 
 	radiance = radiance + emissionTexture.xyz;
 
-	incomigPayload.radiance = radiance / 2.0;
+	incomigPayload.radiance = radiance;
 }

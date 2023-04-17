@@ -29,15 +29,7 @@ int main(int argc, char* argv[])
 
 	ModelLoader loader;
 	
-	//ModelData mod = loader.loadModel("C:\\Users\\Eric\\Blender\\Starfighter\\Starfighter.obj");
-
-	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza_original\\sponza.obj");
-
-	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\survival_guitar_backpack\\scene.gltf");
-
-	//ModelData sunTemple = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sun_temple\\SunTemple.fbx");
-
-	ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
+	ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
 
 	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
 
@@ -48,7 +40,7 @@ int main(int argc, char* argv[])
 	std::vector<Mesh> testScene;
 
 	std::vector<MeshInstance> instances;
-	for(auto& m : sponza.meshes)
+	for(auto& m : scene.meshes)
 	{
 		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices, m.name));
 		
@@ -82,7 +74,7 @@ int main(int argc, char* argv[])
 	raytracer.loadMesh(pointSource.meshes[0].vertices, pointSource.meshes[0].indices, pointSource.meshes[0].name);
 	pointLightInstance = raytracer.getMeshInstance(pointSource.meshes[0].name);
 	TextureData* data = loader.getTextureData(pointSource.meshes[0].material.albedo);
-	pointLightInstance.material.albedoIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.albedo);
+	pointLightInstance.material.albedoIndex = 0;
 	data = loader.getTextureData(pointSource.meshes[0].material.normal);
 	pointLightInstance.material.normalIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.normal);
 	data = loader.getTextureData(pointSource.meshes[0].material.roughness);
@@ -144,6 +136,8 @@ int main(int argc, char* argv[])
 
 	float deltaFront = 0.0f;
 	float deltaRight = 0.0f;
+
+	camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
 
 	while (!quit)
 	{

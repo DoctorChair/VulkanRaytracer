@@ -709,8 +709,6 @@ void Raytracer::updatePostProcessDescriptorSets()
 void Raytracer::executeDefferedPass()
 {
 	GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
-	VkFence defferedRenderFence = _frameSynchroStructs[_currentFrameIndex]._defferedRenderFence;
-	VkFence raytraceRenderFence = _frameSynchroStructs[_currentFrameIndex]._raytraceFence;
 	
 	VkSemaphore presentSemaphore = _frameSynchroStructs[_currentFrameIndex]._presentSemaphore;
 
@@ -722,7 +720,8 @@ void Raytracer::executeDefferedPass()
 
 	VkRect2D renderArea = { 0, 0, nativeWidth, nativeHeight };
 	
-	VkFence fences[] = { defferedRenderFence, raytraceRenderFence};
+	VkFence fences[] = {_frameSynchroStructs[_currentFrameIndex]._frameFence};
+
 
 	VK_CHECK(defferedCmd->begin(fences, std::size(fences), _vulkan._device));
 
@@ -943,7 +942,7 @@ void Raytracer::executeDefferedPass()
 	defferedCmd->end();
 
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	VK_CHECK(defferedCmd->submit(nullptr, 0, &presentSemaphore, 1, waitStages, defferedRenderFence, _vulkan._graphicsQeueu));
+	VK_CHECK(defferedCmd->submit(&_frameSynchroStructs[_currentFrameIndex]._defferedRenderSemaphore, 1, &presentSemaphore, 1, waitStages, nullptr, _vulkan._graphicsQeueu));
 
 	_sunLightTransferCache.clear();
 	_pointLightTransferCache.clear();
@@ -955,7 +954,7 @@ void Raytracer::executeDefferedPass()
 void Raytracer::executeRaytracePass()
 {
 		VGM::CommandBuffer* raytraceCmd = &_raytraceRenderCommandBuffers[_currentFrameIndex];
-		VkFence raytraceFence = _frameSynchroStructs[_currentFrameIndex]._raytraceFence;
+		
 		VkSemaphore raytraceSemaphore = _frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore;
 		VkSemaphore defferedSemaphore = _frameSynchroStructs[_currentFrameIndex]._defferedRenderSemaphore;
 
@@ -1037,7 +1036,8 @@ void Raytracer::executeRaytracePass()
 
 		raytraceCmd->end();
 
-		VK_CHECK(raytraceCmd->submit(&_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1, nullptr, 0, nullptr, raytraceFence, _vulkan._computeQueue));
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR };
+		VK_CHECK(raytraceCmd->submit(&_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1, &_frameSynchroStructs[_currentFrameIndex]._defferedRenderSemaphore, 1, waitStages, nullptr, _vulkan._computeQueue));
 
 		_accelerationStructure._instanceTransferCache.clear();
 	
@@ -1050,10 +1050,10 @@ void Raytracer::executePostProcessPass()
 	VGM::CommandBuffer* postProcessCmd = &_postProcessCommandBuffers[_currentFrameIndex];
 	VkDescriptorSet currentpostProcessDescriptorSet = _postProcessDescriptorSets[_currentFrameIndex];
 
-	VkFence currentFence = _frameSynchroStructs[_currentFrameIndex]._postProcessFence;
+	VkFence currentFence = _frameSynchroStructs[_currentFrameIndex]._frameFence;
 	VkSemaphore currentPostProcessSemaphore = _frameSynchroStructs[_currentFrameIndex]._postProcessSemaphore;
 
-	postProcessCmd->begin(&currentFence, 1, _vulkan._device);
+	postProcessCmd->begin(nullptr, 0, _vulkan._device);
 	
 	/*updatePostProcessDescriptorSets();*/
 
@@ -1153,7 +1153,7 @@ void Raytracer::executePostProcessPass()
 
 	postProcessCmd->end();
 	
-	vkDeviceWaitIdle(_vulkan._device);
+	
 
 	VkPipelineStageFlags waitStageFlags = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 	VK_CHECK(postProcessCmd->submit(&currentPostProcessSemaphore, 1, &_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1, &waitStageFlags, currentFence, _vulkan._computeQueue));
@@ -1669,17 +1669,13 @@ void Raytracer::initSyncStructures()
 	_frameSynchroStructs.resize(_concurrencyCount);
 	for (unsigned int i = 0; i < _concurrencyCount; i++)
 	{
-		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._offsrceenRenderFence);
-		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._defferedRenderFence);
-		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._raytraceFence);
-		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._postProcessFence);
+
+		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._frameFence);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._offsceenRenderSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._defferedRenderSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._postProcessSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._raytraceSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._presentSemaphore);
-		vkCreateEvent(_vulkan._device, &eventCreateInfo, nullptr, &_frameSynchroStructs[i]._defferedFinishedEvent);
-		vkCreateEvent(_vulkan._device, &eventCreateInfo, nullptr, &_frameSynchroStructs[i]._raytraceFinishedEvent);
 	}
 }
 

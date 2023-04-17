@@ -189,14 +189,7 @@ struct FrameSynchro
 	VkSemaphore _raytraceSemaphore;
 	VkSemaphore _postProcessSemaphore;
 	VkSemaphore _presentSemaphore;
-	VkFence _offsrceenRenderFence;
-	VkFence _defferedRenderFence;
-	VkFence _raytraceFence;
-	VkFence _postProcessFence;
-
-	VkEvent _defferedFinishedEvent;
-
-	VkEvent _raytraceFinishedEvent;
+	VkFence _frameFence;
 };
 
 struct SunLight
@@ -269,6 +262,9 @@ public:
 	void drawSpotLight(SpotLight light);
 	void setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position);
 	void update();
+
+	void drawSingleFrame(const std::string& ragetPath);
+
 	void destroy();
 
 private:
@@ -343,9 +339,9 @@ private:
 	uint32_t _maxRecoursionDepth = 2;
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
-	uint32_t _shadowSampleCount = 3;
+	uint32_t _shadowSampleCount = 1;
 	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 8;
+	uint32_t _historyLength = 32;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;

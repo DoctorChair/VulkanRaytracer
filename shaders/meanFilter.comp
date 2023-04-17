@@ -21,7 +21,7 @@ layout(set = 0, binding = 0) uniform RenderBuffer{
 } globalDrawData;
 
 layout(set = 0, binding = 1, rgba32f) uniform readonly image3D radianceHistory;
-layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[2];
+layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[16];
 layout(set = 0, binding = 3, rgba32f) uniform readonly image2D position; 
 layout(set = 0, binding = 4, rgba32f) uniform readonly image2D normal; 
 layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
