@@ -2,9 +2,9 @@
 
 float ndfGGX(float normalDotHalfway, float alpha)
 {
-	float hv = normalDotHalfway * normalDotHalfway;
 	float alphaSquared = alpha * alpha;
-	return alphaSquared / (M_PI * pow((pow(hv, 2.0) * (alphaSquared - 1.0 ) + 1.0), 2.0 ));
+	float normalDotHalfwaySquared = normalDotHalfway * normalDotHalfway;
+	return alphaSquared / (M_PI * pow(normalDotHalfwaySquared * (alphaSquared - 1.0 ) + 1.0, 2.0 ));
 }
 
 float schlickGGX(float v, float k)
@@ -25,24 +25,25 @@ vec3 fresnelSchlick(vec3 r0, float cosTheta)
 vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, float metallic, float roughness, float reflectance)
 {
 	vec3 halfwayVector = normalize(viewDirection + lightDirection);
-	float alpha = roughness * roughness;
 
 	vec3 r0 = mix(vec3(reflectance), color, metallic);
 
-	float normalDotLightDir = max(dot(normal, lightDirection), 0.01);
-	float normalDotView = max(dot(normal, viewDirection), 0.01);
-	float normalDotHalfway = max(dot(normal, halfwayVector), 0.01);
+	roughness = max(roughness, 0.000001);
+
+	float normalDotLightDir = max(dot(normal, lightDirection), 0.0001);
+	float normalDotView = max(dot(normal, viewDirection), 0.0001);
+	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0001);
 
 	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
-	float geometric = geometricFunction(normalDotView, normalDotLightDir, pow(alpha+1.0, 2.0) / 8.0);
-	float ndf = ndfGGX(normalDotHalfway, alpha);
+	float geometric = geometricFunction(normalDotView, normalDotLightDir, pow(roughness+1.0, 2.0) / 8.0);
+	float ndf = ndfGGX(normalDotHalfway, roughness);
 
 	vec3 specular = ( ndf * fresnel * geometric )
-					/ (4 * max(normalDotLightDir, 0.01) * max(normalDotView, 0.01));
+					/ (4 * normalDotLightDir * normalDotView);
 
 	vec3 lambert = color;
-	/* lambert = lambert * (vec3(1.0) - fresnel);
-	lambert = lambert * (1.0 - metallic); */
+	lambert = lambert * (vec3(1.0) - fresnel) * (1.0 - metallic);
+	//lambert = lambert * (1.0 - metallic); */
 	lambert = lambert / M_PI;
 
 	return lambert + specular;
@@ -52,22 +53,23 @@ vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, v
 vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, float metallic, float roughness, float reflectance)
 {
 	vec3 halfwayVector = normalize(viewDirection + lightDirection);
-	float alpha = roughness * roughness;
 
 	vec3 r0 = mix(vec3(reflectance), color, metallic);
 
-	float normalDotLightDir = max(dot(normal, lightDirection), 0.01);
-	float normalDotView = max(dot(normal, viewDirection), 0.01);
-	float normalDotHalfway = max(dot(normal, halfwayVector), 0.01);
+	roughness = max(roughness, 0.000001);
+
+	float normalDotLightDir = max(dot(normal, lightDirection), 0.0001);
+	float normalDotView = max(dot(normal, viewDirection), 0.0001);
+	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0001);
 
 	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
-	float geometric = geometricFunction(normalDotView, normalDotLightDir, alpha * 0.5);
-	float ndf = ndfGGX(normalDotHalfway, alpha);
+	float geometric = geometricFunction(normalDotView, normalDotLightDir, roughness * roughness * 0.5);
+	float ndf = ndfGGX(normalDotHalfway, roughness);
 
 	vec3 specular = ( ndf * fresnel * geometric )
-					/ (4 * max(normalDotLightDir, 0.0001) * max(normalDotView, 0.0001));
+					/ (4 * normalDotLightDir * normalDotView);
 
-	return color; specular;
+	return specular;
 }
 
 vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float maxPhiDeviationAngle, float randomTheta, float randomPhi)

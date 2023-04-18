@@ -156,13 +156,13 @@ void main()
     vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], linearSampler), texCoord);
     vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], linearSampler), texCoord);
 	vec3 normal = tbnMatrix * normalTexture.xyz;
-	normal = normalize(normal);
+	normal = normalize(normal) * float(material.normalIndex != 0) + worldMeshNormal * float(material.normalIndex == 0);	
 
 	float reflectance = 0.04;	
 	float roughness = roughnessTexture.x;
 	float metallic = metallicTexture.y;
 
-	
+	float filterExponent = 1.2;
 
 	uint  rayFlags = gl_RayFlagsOpaqueEXT;
 	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
@@ -180,7 +180,7 @@ void main()
 			vec3 lightDirection = pointLightBuffer.pointLights[i].position - worldPosition;
     	  	float distance = length(lightDirection);
     	  	lightDirection = normalize(lightDirection);
-    	  	float cosTheta = dot(lightDirection, normal);
+    	  	float cosTheta = max(dot(lightDirection, normal), 0.0);
 			
 			float radius = pointLightBuffer.pointLights[i].radius;
 			float area = 3*M_PI*pow(radius, 2.0);
@@ -207,7 +207,7 @@ void main()
 
 		    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
-			vec3 lightRadiance = lightEmission.xyz * pointLightBuffer.pointLights[i].strength * max(cosTheta, 0.0) * attenuation * shadowPayload * area;
+			vec3 lightRadiance = lightEmission.xyz * pointLightBuffer.pointLights[i].strength * cosTheta * attenuation * shadowPayload * area;
 
 			radiance = radiance + brdf * lightRadiance;
 		}
@@ -238,27 +238,27 @@ void main()
 
 	    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
-		vec3 lightRadiance = lightColor* sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload;
+		vec3 lightRadiance = lightColor * sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload;
 
 		radiance = radiance + brdf * lightRadiance;
 	}
 	
 	
 
-	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth+1)
+	if(incomigPayload.depth + 1 < globalDrawData.maxRecoursionDepth)
 	{
 	vec3 diffuseRadiance = vec3(0.0);
 	vec3 specularRadiance = vec3(0.0);
 	
+	incomigPayload.depth++;
 
-		incomigPayload.depth++;
-    	
+    	{
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy);
     
     	float pdfValue = lambertImportancePDF(noise.x);
     	float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
 
-    	float weight = veachBalanceHeuristik(pdfValue, ggxPdfValue);
+    	float weight = veachPowerHeurisitk(pdfValue, ggxPdfValue, filterExponent);
     	vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
 
 		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
@@ -276,20 +276,27 @@ void main()
         1               // payload (location = 0)
         );
 
-		diffuseRadiance = diffuseRadiance + colorTexture.xyz * cosTheta * incomigPayload.radiance * weight / pdfValue;
+		vec3 r0 = mix(vec3(reflectance), colorTexture.xyz, metallic);
+    	vec3 fresnel = fresnelSchlick(r0, cosTheta);
+		vec3 lambert = colorTexture.xyz * (vec3(1.0) - fresnel) * (1.0 - metallic);
+		
+		diffuseRadiance = diffuseRadiance + weight * (lambert /* * cosTheta */ * incomigPayload.radiance/*  / pdfValue */);
+		}
 
-
-		noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.yx);
+		{
+		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.yx);
     
-    	pdfValue = ggxImportancePDF(noise.x, roughness);
+    	float pdfValue = ggxImportancePDF(noise.x, roughness);
     	float lambertPDFValue =  lambertImportancePDF(noise.x);
 
 		pdfValue = max(pdfValue, 0.001);
-    	weight = veachBalanceHeuristik(pdfValue ,lambertPDFValue);
+    	float weight = veachPowerHeurisitk(pdfValue ,lambertPDFValue, filterExponent);
 
 		vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
 
     	vec3 reflectionDirection = reflect(-gl_WorldRayDirectionEXT, halfwayVector);
+
+		float cosTheta =  max(dot(reflectionDirection, normal), 0.0);
 
 		traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
@@ -303,15 +310,15 @@ void main()
         tMax,           // ray max range
         1               // payload (location = 0)
         );
-
-		incomigPayload.depth--;
-
+		
 		vec3 brdf = ggxSpecularBRDF(gl_WorldRayDirectionEXT, reflectionDirection, normal.xyz, colorTexture.xyz, metallic, roughness, reflectance);
 
-		specularRadiance = specularRadiance + incomigPayload.radiance * brdf * weight / pdfValue; 
+		specularRadiance = specularRadiance + weight * ( incomigPayload.radiance * cosTheta * brdf / pdfValue); 
+		}
 	
-	
-	radiance = radiance + specularRadiance + diffuseRadiance;
+	incomigPayload.depth--;
+
+	radiance = radiance + specularRadiance +  diffuseRadiance;
 	
 	}
 	} 

@@ -329,7 +329,7 @@ private:
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
-	uint32_t _maxMipMapLevels = 4;
+	uint32_t _maxMipMapLevels = 3;
 	uint64_t _timeout = 100000000;
 	
 	uint32_t _maxSunLights = 10;
@@ -341,7 +341,7 @@ private:
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 1;
 	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 32;
+	uint32_t _historyLength = 64;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;

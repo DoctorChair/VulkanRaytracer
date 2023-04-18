@@ -31,7 +31,9 @@ int main(int argc, char* argv[])
 	
 	ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
 
-	//ModelData sponza = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
+	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
+
+	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
 
 	ModelData pointSource = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\LightSources\\\LightSource.gltf");
 
@@ -115,7 +117,7 @@ int main(int argc, char* argv[])
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
 	PointLightSourceInstance p;
-	p.position = glm::vec3(0.0f, 10.0f, 0.0f);
+	p.position = glm::vec3(0.0f, 4.0f, 0.0f);
 	p.radius = 0.05f;
 	p.strength = 5000.0f;
 	p.lightModel = pointLightInstance;
