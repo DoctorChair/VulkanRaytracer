@@ -78,7 +78,15 @@ void main()
 	
 	normal.xyz = normalize(normal.xyz * 2.0 - 1.0); 
 	normal.xyz = tbnMatrix * normal.xyz;
-	outNormal =  vec4(normalize(normal.xyz ), normal.w) * float(normalIndex != 0) + vec4(N, 1.0) * float(normalIndex == 0);
+	
+	if(normalIndex != 0)
+	{
+		outNormal =  vec4(normalize(normal.xyz), normal.w);
+	}
+	else
+	{
+		outNormal = vec4(N, 1.0);
+	}
 
 	outRoughnessMetallness.x = roughness.y;// * float(roughnessIndex != 0) + 1.0f * float(roughnessIndex == 0);
 	outRoughnessMetallness.y = metallic.z;// * float(metallicIndex != 0) + 0.0f * float(metallicIndex == 0);

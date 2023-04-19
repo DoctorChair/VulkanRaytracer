@@ -155,12 +155,20 @@ void main()
 	vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], linearSampler), texCoord);
     vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], linearSampler), texCoord);
     vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], linearSampler), texCoord);
-	vec3 normal = tbnMatrix * normalTexture.xyz;
-	normal = normalize(normal) * float(material.normalIndex != 0) + worldMeshNormal * float(material.normalIndex == 0);	
+	vec3 normal;
+	
+	if(material.normalIndex != 0)
+	{
+		normal = normalize(tbnMatrix * normalTexture.xyz);
+	}
+	else
+	{
+		normal = worldMeshNormal;
+	}
 
 	float reflectance = 0.04;	
-	float roughness = roughnessTexture.x;
-	float metallic = metallicTexture.y;
+	float roughness = roughnessTexture.y;
+	float metallic = metallicTexture.z;
 
 	float filterExponent = 1.2;
 
@@ -203,13 +211,14 @@ void main()
 
 			float attenuation = 1.0/max((distance*distance), 0.001);
 
-			vec3 viewDirection = worldPosition - gl_WorldRayOriginEXT;
+			vec3 viewDirection = normalize(worldPosition - gl_WorldRayOriginEXT);
 
 		    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
 			vec3 lightRadiance = lightEmission.xyz * pointLightBuffer.pointLights[i].strength * cosTheta * attenuation * shadowPayload * area;
 
 			radiance = radiance + brdf * lightRadiance;
+			
 		}
 
 	for(uint i = 0; i < globalDrawData.sunLightCount; i++)

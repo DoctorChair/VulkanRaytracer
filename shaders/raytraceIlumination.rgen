@@ -86,7 +86,7 @@ void main()
   const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
   vec2 d = inUV * 2.0 - 1.0;
 
-  vec4 unlitColor = texture(primaryRayUnlitColorTexture, inUV);
+  vec4 color = texture(primaryRayUnlitColorTexture, inUV);
   vec4 normal = texture(primaryRayNormalTexture, inUV);
   float depth = texture(primaryRayDepthTexture, inUV).x;
   vec4 roughnessMetalness = texture(primaryRayRoughnessMetalicTexture, inUV);
@@ -167,7 +167,7 @@ void main()
         
       float attenuation = 1.0/(distance*distance);
 	    
-      vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance);
+      vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, color.xyz, metallic, roughness, reflectance);
       
       vec3 lightRadiance = lightEmission.xyz * vec3(pointLightBuffer.pointLights[i].strength * cosTheta * attenuation * shadowPayload * p * area);
 	    lightSourceRadiance =  lightSourceRadiance +  brdf * lightRadiance;
@@ -200,7 +200,7 @@ void main()
     vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 
 
-	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance) * shadowPayload;
+	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, color.xyz, metallic, roughness, reflectance) * shadowPayload;
 	  radiance =  radiance + brdf * sunLightBuffer.sunLights[i].strength * lightColor * cosTheta;
   }
 
@@ -241,9 +241,9 @@ void main()
       1               // payload (location = 0)
       );
 
-    vec3 r0 = mix(vec3(reflectance), unlitColor.xyz, metallic);
+    vec3 r0 = mix(vec3(reflectance), color.xyz, metallic);
     vec3 fresnel = fresnelSchlick(r0, cosTheta);
-    vec3 lambert = unlitColor.xyz * (vec3(1.0) - fresnel) * (1.0 - metallic);
+    vec3 lambert = color.xyz * (vec3(1.0) - fresnel) * (1.0 - metallic);
 
     diffuseRadiance = diffuseRadiance + weight * (lambert /* * cosTheta */ * payload.radiance /* / pdfValue */);
     
@@ -288,7 +288,7 @@ void main()
         1               // payload (location = 0)
         );
 
-    vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, unlitColor.xyz, metallic, roughness, reflectance); 
+    vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, color.xyz, metallic, roughness, reflectance); 
 
     specularRadiance = specularRadiance + weight * (payload.radiance * cosTheta * brdf / pdfValue);
 	} 
@@ -297,7 +297,6 @@ void main()
   outColor.xyz = radiance;
   outColor.xyz = outColor.xyz + specularRadiance; 
   outColor.xyz = outColor.xyz + diffuseRadiance;
-  
   outColor.xyz = outColor.xyz + primaryEmission.xyz;
  
 
