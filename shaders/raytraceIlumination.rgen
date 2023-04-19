@@ -44,7 +44,7 @@ layout(set = 1, binding = 4) uniform sampler2D primaryRayPositionTexture;
 layout(set = 1, binding = 5) uniform sampler2D primaryRayEmissionTexture;
 
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout(set = 2, binding = 1, rgba32f) uniform image3D image;
+layout(set = 2, binding = 1, rgba32f) uniform image2D image;
 layout(std430, set = 2, binding = 4) readonly buffer sampleSequenceBuffer{
   vec2 samples[];
 } sampleSequence;
@@ -303,5 +303,5 @@ void main()
   outColor.w = depth;
   }
   
-  imageStore(image, ivec3(gl_LaunchIDEXT.xy, globalDrawData.historyIndex), outColor);
+  imageStore(image, ivec2(gl_LaunchIDEXT.xy), outColor);
 }

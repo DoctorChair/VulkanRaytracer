@@ -21,16 +21,17 @@ layout(set = 0, binding = 0) uniform RenderBuffer{
 	uint environmentTextureIndex;
 } globalDrawData;
 
-layout(set = 0, binding = 1, rgba32f) uniform readonly image3D radianceHistory;
+layout(set = 0, binding = 1, rgba32f) uniform readonly image2D radianceHistory[32];
 layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[32];
 layout(set = 0, binding = 3, rgba32f) uniform readonly image2D position; 
 layout(set = 0, binding = 4, rgba32f) uniform readonly image2D normal; 
 layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
 
+
 layout(set = 1, binding = 0, rgba32f) uniform readonly image2D inputImage;
 layout(set = 1, binding = 1, rgba32f) uniform writeonly image2D outputImage; 
 
-vec4 loadInterpolateBilinear2D(vec3 texCoord, vec2 imageDimesions)
+vec4 loadInterpolateBilinearVelocity2D(vec3 texCoord, vec2 imageDimesions)
 {
 	vec2 imageCoord = texCoord.xy * vec2(imageDimesions);
 
@@ -51,19 +52,19 @@ vec4 loadInterpolateBilinear2D(vec3 texCoord, vec2 imageDimesions)
 	return result;
 }
 
-vec4 loadInterpolateBilinear3D(vec3 texCoord, vec2 imageDimesions)
+vec4 loadInterpolateBilinearRadiance2D(vec3 texCoord, vec2 imageDimesions)
 {
 	vec2 imageCoord = texCoord.xy * vec2(imageDimesions);
 
-	ivec3 a = ivec3(floor(imageCoord.x), floor(imageCoord.y), int(texCoord.z));
-	ivec3 b = ivec3(floor(imageCoord.x), ceil(imageCoord.y), int(texCoord.z));
-	ivec3 c = ivec3(ceil(imageCoord.x), floor(imageCoord.y), int(texCoord.z));
-	ivec3 d = ivec3(ceil(imageCoord.x), ceil(imageCoord.y), int(texCoord.z));
+	ivec2 a = ivec2(floor(imageCoord.x), floor(imageCoord.y));
+	ivec2 b = ivec2(floor(imageCoord.x), ceil(imageCoord.y));
+	ivec2 c = ivec2(ceil(imageCoord.x), floor(imageCoord.y));
+	ivec2 d = ivec2(ceil(imageCoord.x), ceil(imageCoord.y));
 
-	vec4 A = imageLoad(radianceHistory, a);
-	vec4 B = imageLoad(radianceHistory, b);
-	vec4 C = imageLoad(radianceHistory, c);
-	vec4 D = imageLoad(radianceHistory, d);
+	vec4 A = imageLoad(radianceHistory[uint(texCoord.z)], a);
+	vec4 B = imageLoad(radianceHistory[uint(texCoord.z)], b);
+	vec4 C = imageLoad(radianceHistory[uint(texCoord.z)], c);
+	vec4 D = imageLoad(radianceHistory[uint(texCoord.z)], d);
 
 	vec4 colorA = mix(A, B, imageCoord.y - floor(imageCoord.y));
 	vec4 colorb = mix(C, D, imageCoord.y - floor(imageCoord.y));
@@ -80,15 +81,14 @@ void main()
 	uint index = globalDrawData.historyIndex;
 
     vec4 radiance = vec4(0.0);
-    vec4 currentFrame = imageLoad(radianceHistory, ivec3(gl_GlobalInvocationID.xy, index));
+    vec4 currentFrame = imageLoad(radianceHistory[index], ivec2(gl_GlobalInvocationID.xy));
 	radiance = currentFrame;
 	
 	vec4 nextFrame;
 
-	vec4 oldH = loadInterpolateBilinear2D(vec3(uv, index), imageDimesions);
+	vec4 oldH = loadInterpolateBilinearVelocity2D(vec3(uv, index), imageDimesions);
 	vec4 newH;
-
-
+	
 	uint count = 1;
 	bool abort = false;
 
@@ -98,9 +98,9 @@ void main()
 
 		index = index - 1 % globalDrawData.historyLength * uint(index != 0) + (globalDrawData.historyLength - 1) * uint(index == 0);   
 
-		newH = loadInterpolateBilinear2D(vec3(uv, index), imageDimesions);
+		newH = loadInterpolateBilinearVelocity2D(vec3(uv, index), imageDimesions);
 		
-		nextFrame =  loadInterpolateBilinear3D(vec3(uv, index), imageDimesions);
+		nextFrame =  loadInterpolateBilinearRadiance2D(vec3(uv, index), imageDimesions);
 		
 		bool condition = int(oldH.z) == int(newH.z) && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
 

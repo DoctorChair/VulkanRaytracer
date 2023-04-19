@@ -76,11 +76,8 @@ struct HistoryBuffer
 	std::vector<VGM::Texture> velocityHistoryBuffer;
 	std::vector<VkImageView> velocityViews;
 
-	VGM::Texture radianceHistory;
-	VkImageView radianceView;
-
-	std::vector<VGM::Texture> idHistoryBuffer;
-	std::vector<VkImageView> idViews;
+	std::vector<VGM::Texture> radianceHistoryBuffer;
+	std::vector<VkImageView> radianceViews;
 	
 	uint32_t currentIndex = 0;
 };
@@ -341,7 +338,7 @@ private:
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 1;
 	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 32;
+	uint32_t _historyLength = 64;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;
