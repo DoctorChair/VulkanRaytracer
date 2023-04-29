@@ -74,18 +74,6 @@ vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 
 
 vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float maxPhiDeviationAngle, float randomTheta, float randomPhi)
 {
-	
-	/* vec3 tangent = vec3(originVector.z, 0.0, -originVector.x) * float(abs(originVector.x) > abs(originVector.y))
-				+ vec3(0.0, -originVector.z, originVector.y) * float(abs(originVector.y) > abs(originVector.x));
-	vec3 bitanget = normalize(cross(originVector, tangent));
-	
-	vec3 sampleVector;
-	sampleVector.x = sin(maxThetaDeviationAngle * randomTheta) * cos(maxPhiDeviationAngle * randomPhi);
-	sampleVector.y = cos(maxThetaDeviationAngle * randomTheta);
-	sampleVector.z = sin(maxThetaDeviationAngle * randomTheta) * sin(maxPhiDeviationAngle * randomPhi);
-	
-	mat3 tbn = mat3(tangent, originVector, bitanget);
- */
 	float phi = randomPhi * maxPhiDeviationAngle;
 	float theta = randomTheta * maxThetaDeviationAngle;
 
@@ -112,6 +100,25 @@ vec3 createLightSampleVector(vec3 originVector, float radius, float randomTheta,
 	vec3 bitanget = normalize(cross(tangent, originVector));
 	
 	return vec3(originVector + diskSample.x * tangent + diskSample.y * bitanget); 
+}
+
+vec3 createLightSamplePoint(vec3 orientationVector, vec3 originPoint, float radius, float randomTheta, float randomPhi)
+{
+	float phi = randomPhi * 2 * M_PI;
+	float theta = randomTheta * M_PI * 0.5;
+
+	vec3 sampleVector;
+	sampleVector.x = cos(phi) * sin(theta);
+	sampleVector.y = sin(phi) * sin(theta);
+	sampleVector.z = cos(theta);
+
+	vec3 up = float(abs(orientationVector.z) < 0.999) *  vec3(0.0, 0.0, 1.0) + float(abs(orientationVector.z) >= 0.999) * vec3(1.0, 0.0, 0.0);
+	vec3 tangent = normalize(cross(up, orientationVector));
+	vec3 bitanget = cross(orientationVector, tangent);
+
+	mat3 tbn = mat3(tangent, bitanget, orientationVector);
+
+	return originPoint + (tbn *  normalize(sampleVector) * radius);
 }
 
 float lambertImportancePDF(float x)

@@ -105,12 +105,12 @@ int main(int argc, char* argv[])
 	point3.radius = 0.2f;
 	point3.position = glm::vec3(0.0f, 6.0f, 0.0f);
 	point3.color = glm::vec3(1.0f, 1.0f, 0.8f);
-	point3.strength = 50.0f;
+	point3.strength = 5000.0f;
 
 	SunLight sun = {};
 	sun.color = glm::vec3(1.0f , 1.0f, 1.0f);
 	sun.direction = glm::vec3(1.0f, -1.0f, 0.0f);
-	sun.strength = 0.0;
+	sun.strength = 10.0f;
 
 	SpotLight spot = {};
 
@@ -118,8 +118,8 @@ int main(int argc, char* argv[])
 
 	PointLightSourceInstance p;
 	p.position = glm::vec3(0.0f, 4.0f, 0.0f);
-	p.radius = 0.05f;
-	p.strength = 5000.0f;
+	p.radius = 0.005f;
+	p.strength = 50000.0f;
 	p.lightModel = pointLightInstance;
 
 	CameraController camera(2.0f, 20.0f, 90.0f, 1920.0f/1080.0f, 0.1f, 100.0f, up);

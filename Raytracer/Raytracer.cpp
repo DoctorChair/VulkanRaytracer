@@ -1191,6 +1191,9 @@ void Raytracer::initSamplers()
 	createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
 	vkCreateSampler(_vulkan._device, &createInfo, nullptr, &_nearestNeighborSampler);
+
+	createInfo.minLod = std::floor((float)_maxMipMapLevels/2.0);
+	vkCreateSampler(_vulkan._device, &createInfo, nullptr, &_lowFidelitySampler);
 }
 
 void Raytracer::updateDescriptorSets()

@@ -170,7 +170,7 @@ void main()
 	float roughness = roughnessTexture.y;
 	float metallic = metallicTexture.z;
 
-	float filterExponent = 1.2;
+	float filterExponent = 1.0;
 
 	uint  rayFlags = gl_RayFlagsOpaqueEXT;
 	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
@@ -265,10 +265,10 @@ void main()
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy);
     
     	float pdfValue = lambertImportancePDF(noise.x);
-    	float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
+    	float ggxPdfValue = ggxImportancePDF(noise.x, roughness * roughness);
 
     	float weight = veachPowerHeurisitk(pdfValue, ggxPdfValue, filterExponent);
-    	vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
+    	vec3 sampleDirection = createSampleVector(normal.xyz, 1, 2.0 * M_PI, pdfValue, noise.y);
 
 		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
 
@@ -301,7 +301,7 @@ void main()
 		pdfValue = max(pdfValue, 0.001);
     	float weight = veachPowerHeurisitk(pdfValue ,lambertPDFValue, filterExponent);
 
-		vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
+		vec3 halfwayVector = createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y);
 
     	vec3 reflectionDirection = reflect(-gl_WorldRayDirectionEXT, halfwayVector);
 

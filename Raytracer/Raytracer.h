@@ -398,6 +398,7 @@ private:
 	
 	VkSampler _linearSampler;
 	VkSampler _nearestNeighborSampler;
+	VkSampler _lowFidelitySampler;
 
 	std::vector<VGM::Buffer> _cameraBuffers;
 	std::vector<VGM::Buffer> _globalRenderDataBuffers;

@@ -122,7 +122,7 @@ void main()
   vec2 offset = vec2(float((globalDrawData.frameNumber) % globalDrawData.historyLength)) / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight));
   vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), inUV * vec2(1920.0/1024.0, 1080.0/1024.0) + offset);
 
-  float filterExponent = 1.2;
+  float filterExponent = 1.0;
   
   vec3 radiance = vec3(0.0, 0.0, 0.0);
 
@@ -131,7 +131,7 @@ void main()
     vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
     float distance = length(lightDirection);
     lightDirection = normalize(lightDirection);
-    float cosTheta = max(dot(lightDirection, normal.xyz), 0.0);
+   
     
     vec3 lightSourceRadiance =  vec3(0.0, 0.0, 0.0);
 
@@ -143,9 +143,16 @@ void main()
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
       float radius = pointLightBuffer.pointLights[i].radius;
-      vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, (noise.y - 0.5) * 2.0));
       
-      vec3 lightNormal = normalize(lightSampleDirection - (dot(lightDirection*distance, lightSampleDirection) * lightDirection * distance));
+      
+      vec3 sphereSamplePoint = createLightSamplePoint(-lightDirection,  pointLightBuffer.pointLights[i].position, radius, noise.x, noise.y);
+      vec3 lightSampleDirection = sphereSamplePoint - samplePosition.xyz;
+      float sphereDistance = length(lightSampleDirection);
+      lightSampleDirection = normalize(lightSampleDirection);
+      vec3 lightNormal = normalize(sphereSamplePoint - pointLightBuffer.pointLights[i].position);
+      
+      float cosTheta = max(dot(lightDirection, normal.xyz), 0.0);
+
       float area = 3*M_PI*pow(radius, 2.0);
       float p = max(dot(-lightSampleDirection, lightNormal), 0.0);
 
@@ -165,7 +172,7 @@ void main()
       vec2 sphereUV = vec2(atan(lightNormal.x, lightNormal.z) / (2*M_PI) + 0.5, lightNormal.y * 0.5 + 0.5);
       vec4 lightEmission = texture(sampler2D(textures[pointLightBuffer.pointLights[i].emissionIndex], linearSampler), sphereUV); 
         
-      float attenuation = 1.0/(distance*distance);
+      float attenuation = 1.0/(sphereDistance*sphereDistance);
 	    
       vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, color.xyz, metallic, roughness, reflectance);
       
@@ -178,11 +185,21 @@ void main()
 
   for(uint i = 0; i < globalDrawData.sunLightCount; i++)
   {
-    shadowPayload = 0.0;
     vec3 lightDirection = -sunLightBuffer.sunLights[i].direction;
     float range = tMax;
     lightDirection = normalize(lightDirection);
-    
+
+    vec3 lightSourceRadiance = vec3(0.0);
+
+    for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount; s++)
+    {
+    shadowPayload = 0.0;
+    vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(s) 
+      / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
+
+    float radius = 0.3;
+    vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, noise.y * 2.0 - 0.5));
+
     float cosTheta = max(dot(lightDirection, normal.xyz), 0.0);
     traceRayEXT(topLevelAS, // acceleration structure
     shadowRayFlags,       // rayFlags
@@ -192,7 +209,7 @@ void main()
     1,              // missIndex
     samplePosition.xyz,     // ray origin
     tMin,           // ray min range
-    lightDirection.xyz,  // ray direction
+    lightSampleDirection.xyz,  // ray direction
     tMax,           // ray max range
     0               // payload (location = 0)
     );
@@ -200,8 +217,11 @@ void main()
     vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 
 
-	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightDirection, normal.xyz, color.xyz, metallic, roughness, reflectance) * shadowPayload;
-	  radiance =  radiance + brdf * sunLightBuffer.sunLights[i].strength * lightColor * cosTheta;
+	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, color.xyz, metallic, roughness, reflectance) * shadowPayload;
+	  lightSourceRadiance = lightSourceRadiance + brdf * sunLightBuffer.sunLights[i].strength * lightColor * cosTheta;
+
+    }
+    radiance = radiance + lightSourceRadiance / float(globalDrawData.maxShadowRaySampleCount);
   }
 
 
@@ -219,13 +239,13 @@ void main()
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
     float pdfValue = lambertImportancePDF(noise.x);
-    float ggxPdfValue = ggxImportancePDF(noise.x, roughness);
+    float ggxPdfValue = ggxImportancePDF(noise.x, roughness * roughness);
 
     float weight = veachPowerHeurisitk(pdfValue, ggxPdfValue, filterExponent);
    
     w.x = weight;
 
-    vec3 sampleDirection = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
+    vec3 sampleDirection = createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y);
     float cosTheta = max(dot(sampleDirection, normal.xyz), 0.0);
     
     traceRayEXT(topLevelAS, // acceleration structure
@@ -261,7 +281,7 @@ void main()
     vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
-    float pdfValue = ggxImportancePDF(noise.x, roughness);
+    float pdfValue = ggxImportancePDF(noise.x, roughness * roughness);
     float lambertPDFValue =  lambertImportancePDF(noise.x);
 
     pdfValue = max(pdfValue, 0.001);
