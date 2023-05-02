@@ -131,11 +131,10 @@ void main()
     vec3 lightDirection = pointLightBuffer.pointLights[i].position - samplePosition.xyz;
     float distance = length(lightDirection);
     lightDirection = normalize(lightDirection);
-   
     
     vec3 lightSourceRadiance =  vec3(0.0, 0.0, 0.0);
 
-    for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount; s++)
+    for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount && dot(lightDirection, normal.xyz) >= 0; s++)
     {
       shadowPayload = 0.0;
 
@@ -145,7 +144,7 @@ void main()
       float radius = pointLightBuffer.pointLights[i].radius;
       
       
-      vec3 sphereSamplePoint = createLightSamplePoint(-lightDirection,  pointLightBuffer.pointLights[i].position, radius, noise.x, noise.y);
+      vec3 sphereSamplePoint = createLightSamplePoint(-lightDirection,  pointLightBuffer.pointLights[i].position, radius, noise.x, (noise.y * 2.0 - 0.5));
       vec3 lightSampleDirection = sphereSamplePoint - samplePosition.xyz;
       float sphereDistance = length(lightSampleDirection);
       lightSampleDirection = normalize(lightSampleDirection);
@@ -191,16 +190,20 @@ void main()
 
     vec3 lightSourceRadiance = vec3(0.0);
 
-    for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount; s++)
+    for(uint s = 0; s < globalDrawData.maxShadowRaySampleCount && dot(lightDirection, normal.xyz) >= 0; s++)
     {
     shadowPayload = 0.0;
     vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(s) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
-    float radius = 0.3;
+    float radius = sunLightBuffer.sunLights[i].radius;
     vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, noise.y * 2.0 - 0.5));
 
     float cosTheta = max(dot(lightDirection, normal.xyz), 0.0);
+
+    float area = M_PI*pow(radius, 2.0);
+    float p = max(dot(-lightSampleDirection, -lightDirection), 0.0);
+
     traceRayEXT(topLevelAS, // acceleration structure
     shadowRayFlags,       // rayFlags
     0x01,           // cullMask
@@ -216,36 +219,40 @@ void main()
 
     vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 
-
-	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, color.xyz, metallic, roughness, reflectance) * shadowPayload;
-	  lightSourceRadiance = lightSourceRadiance + brdf * sunLightBuffer.sunLights[i].strength * lightColor * cosTheta;
+	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, color.xyz, metallic, roughness, reflectance);
+    vec3 lightRadiance = sunLightBuffer.sunLights[i].strength * lightColor * cosTheta * p * area * shadowPayload;
+	  lightSourceRadiance = lightSourceRadiance + brdf * lightRadiance;
 
     }
     radiance = radiance + lightSourceRadiance / float(globalDrawData.maxShadowRaySampleCount);
   }
 
+  vec3 diffuseRadiance = vec3(0.0);
+  vec3 specularRadiance = vec3(0.0);
 
+  
   payload.radiance = vec3(radiance);
   
   payload.depth = 0;
 
-  vec3 diffuseRadiance = vec3(0.0);
-  
   vec3 w = vec3(0.0);
 
+  if(metallic < 0.8)
+  {
   for(uint i = 0; i < globalDrawData.maxDiffuseSampleCount; i++)
   {
     vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i) 
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
-    float pdfValue = lambertImportancePDF(noise.x);
+    
+    vec3 sampleDirection = createCosineWeightedHemisphereSample(normal.xyz, noise.x, noise.y * 2.0 - 0.5);
+    float pdfValue = sqrt(1.0 - noise.x);
+
     float ggxPdfValue = ggxImportancePDF(noise.x, roughness * roughness);
 
     float weight = veachPowerHeurisitk(pdfValue, ggxPdfValue, filterExponent);
-   
-    w.x = weight;
+    weight = weight / pdfValue;
 
-    vec3 sampleDirection = createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y);
     float cosTheta = max(dot(sampleDirection, normal.xyz), 0.0);
     
     traceRayEXT(topLevelAS, // acceleration structure
@@ -265,15 +272,15 @@ void main()
     vec3 fresnel = fresnelSchlick(r0, cosTheta);
     vec3 lambert = color.xyz * (vec3(1.0) - fresnel) * (1.0 - metallic);
 
-    diffuseRadiance = diffuseRadiance + weight * (lambert /* * cosTheta */ * payload.radiance /* / pdfValue */);
+    diffuseRadiance = diffuseRadiance + weight * (lambert * cosTheta * payload.radiance);
     
   }
   diffuseRadiance = diffuseRadiance / float( globalDrawData.maxDiffuseSampleCount);
-  
+  }
 
   payload.radiance = vec3(radiance);
 
-  vec3 specularRadiance = vec3(0.0);
+ 
   for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
 	{
     uint index = (i + globalDrawData.frameNumber) % globalDrawData.sampleSequenceLength;
@@ -282,12 +289,12 @@ void main()
       / vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight))));
 
     float pdfValue = ggxImportancePDF(noise.x, roughness * roughness);
-    float lambertPDFValue =  lambertImportancePDF(noise.x);
+    float lambertPDFValue = sqrt(1.0 - noise.x);
 
     pdfValue = max(pdfValue, 0.001);
     float weight = veachPowerHeurisitk(pdfValue, lambertPDFValue, filterExponent);
+    weight = weight / pdfValue * (float(metallic < 0.8)) + 1.0 * (float(metallic >= 0.8));
 
-    w.y = weight;
 
     vec3 halfwayVector = createSampleVector(normal.xyz, 0.5 * M_PI, 2.0 * M_PI, pdfValue, (noise.y - 0.5) * 2.0);
 
@@ -310,16 +317,16 @@ void main()
 
     vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, color.xyz, metallic, roughness, reflectance); 
 
-    specularRadiance = specularRadiance + weight * (payload.radiance * cosTheta * brdf / pdfValue);
+    specularRadiance = specularRadiance + weight * (payload.radiance * cosTheta * brdf);
 	} 
   specularRadiance = specularRadiance / float(globalDrawData.maxSpecularSampleCount);
   
+
   outColor.xyz = radiance;
   outColor.xyz = outColor.xyz + specularRadiance; 
   outColor.xyz = outColor.xyz + diffuseRadiance;
-  outColor.xyz = outColor.xyz + primaryEmission.xyz;
- 
-
+  outColor.xyz = primaryEmission.xyz * (float(length(primaryEmission) > 0)) + outColor.xyz * (float(length(primaryEmission) == 0.0));
+  
   outColor.w = depth;
   }
   

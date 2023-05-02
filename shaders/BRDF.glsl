@@ -95,7 +95,7 @@ vec3 createLightSampleVector(vec3 originVector, float radius, float randomTheta,
 {
 	float r = sqrt(randomTheta);
 	float angle = M_PI * 2.0 * randomPhi;
-	vec2 diskSample = vec2(r * cos(angle), r * sin(angle)) * radius;
+	vec2 diskSample = vec2(r * cos(angle) * radius, r * sin(angle)) * radius;
 	vec3 tangent = normalize(cross(originVector, vec3(0.0, 1.0, 0.0)));
 	vec3 bitanget = normalize(cross(tangent, originVector));
 	
@@ -119,6 +119,21 @@ vec3 createLightSamplePoint(vec3 orientationVector, vec3 originPoint, float radi
 	mat3 tbn = mat3(tangent, bitanget, orientationVector);
 
 	return originPoint + (tbn *  normalize(sampleVector) * radius);
+}
+
+vec3 createCosineWeightedHemisphereSample(vec3 originVector, float randomTheta, float randomPhi)
+{
+	float x = sqrt(randomTheta)*cos(2*M_PI*randomPhi);
+	float y = sqrt(randomTheta)*sin(2*M_PI*randomPhi);
+	float z = sqrt(1.0 - randomTheta);
+
+	vec3 up = float(abs(originVector.z) < 0.999) *  vec3(0.0, 0.0, 1.0) + float(abs(originVector.z) >= 0.999) * vec3(1.0, 0.0, 0.0);
+	vec3 tangent = normalize(cross(up, originVector));
+	vec3 bitanget = cross(originVector, tangent);
+
+	mat3 tbn = mat3(tangent, bitanget, originVector);
+
+	return normalize(tbn * vec3(x, y, z));
 }
 
 float lambertImportancePDF(float x)

@@ -23,9 +23,6 @@ layout(set = 0, binding = 0) uniform RenderBuffer{
 
 layout(set = 0, binding = 1, rgba32f) uniform readonly image2D radianceHistory[32];
 layout(set = 0, binding = 2, rgba32f) uniform readonly image2D velocityHistory[32];
-layout(set = 0, binding = 3, rgba32f) uniform readonly image2D position; 
-layout(set = 0, binding = 4, rgba32f) uniform readonly image2D normal; 
-layout(set = 0, binding = 5, r32f) uniform readonly image2D ID;
 
 
 layout(set = 1, binding = 0, rgba32f) uniform readonly image2D inputImage;
@@ -76,12 +73,15 @@ vec4 loadInterpolateBilinearRadiance2D(vec3 texCoord, vec2 imageDimesions)
 void main()
 {
 	vec2 imageDimesions = vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight);
-	vec2 uv = gl_GlobalInvocationID.xy / vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight);
+	//vec2 uv = gl_GlobalInvocationID.xy / vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight);
 	
-	uint index = globalDrawData.historyIndex;
+	const vec2 pixelCenter = vec2(gl_GlobalInvocationID.xy) + vec2(0.5);
+  	vec2 uv = pixelCenter / imageDimesions;
 
+	uint index = globalDrawData.historyIndex;
+	
     vec4 radiance = vec4(0.0);
-    vec4 currentFrame = imageLoad(radianceHistory[index], ivec2(gl_GlobalInvocationID.xy));
+    vec4 currentFrame = loadInterpolateBilinearRadiance2D(vec3(uv, index), imageDimesions);
 	radiance = currentFrame;
 	
 	vec4 nextFrame;
@@ -107,10 +107,10 @@ void main()
 		if(condition)
 		{
 			radiance = radiance + nextFrame;
+			count++;
 		}
 
 		abort = !condition;
-		count++;
 		oldH = newH;
     }
 

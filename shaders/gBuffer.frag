@@ -102,6 +102,8 @@ void main()
 	vec3 current = (vec3(currentProjectionSpacePosition.xyz / currentProjectionSpacePosition.w)) * 0.5 + 0.5;
 	outVelocity = vec4(current - previous, 1.0f);
 	outVelocity.z = float(ID);
-	outVelocity.w = currentProjectionSpacePosition.w;	
+	outVelocity.w = currentProjectionSpacePosition.w;
+
+	outVelocity = float(length(outVelocity) >= 0.001) * outVelocity;
 }
 

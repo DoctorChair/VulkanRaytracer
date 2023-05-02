@@ -516,6 +516,8 @@ void Raytracer::loadPlaceholderMeshAndTexture()
 	_dummyMesh.material.normalIndex = index;
 	_dummyMesh.material.metallicIndex = index;
 	_dummyMesh.material.roughnessIndex = index;
+
+	vkDeviceWaitIdle(_vulkan._device);
 }
 
 void Raytracer::updateGBufferDescriptorSets()
@@ -692,23 +694,11 @@ void Raytracer::updatePostProcessDescriptorSets()
 	globalbufferInfo.offset = 0;
 	globalbufferInfo.range = VK_WHOLE_SIZE;
 
-	VkDescriptorImageInfo normalInfo = {};
-	normalInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-	normalInfo.imageView = _gBufferChain[_currentFrameIndex].normalView;
-	normalInfo.sampler = VK_NULL_HANDLE;
-
-	VkDescriptorImageInfo positionInfo = {};
-	positionInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-	positionInfo.imageView = _gBufferChain[_currentFrameIndex].positionView;
-	positionInfo.sampler = VK_NULL_HANDLE;
-
 	VkDescriptorSet sets[] = { _postProcessDescriptorSets[_currentFrameIndex]};
 	VGM::DescriptorSetUpdater::begin(sets)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo, 1, 0, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, radianceHistoryInfos.data(), nullptr, _historyLength, 0, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, velocityHistoryInfos.data(), nullptr, _historyLength, 0, 2)
-		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &positionInfo, nullptr, 1, 0, 3)
-		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &normalInfo, nullptr, 1, 0, 4)
 		.updateDescriptorSet(_vulkan._device);
 }
 
@@ -1006,7 +996,7 @@ void Raytracer::executeRaytracePass()
 		subresource.levelCount = 1;
 		
 		_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(raytraceCmd->get(), subresource,
-			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT,
+			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT,
 			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
 
 		_raytraceShader.cmdBind(raytraceCmd->get());
@@ -1106,12 +1096,12 @@ void Raytracer::executePostProcessPass()
 		outputInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		outputInfo.imageView = _leapFrogBuffer.views[(i + 1) % 2];
 
-		VGM::DescriptorSetUpdater::begin(&_postProcessInputOutputDescriptorSets[i])
+		VGM::DescriptorSetUpdater::begin(&_postProcessInputOutputDescriptorSets[i + (_maxPostProcessChainLength) * _currentFrameIndex])
 			.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &inputInfo, nullptr, 1, 0, 0)
 			.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &outputInfo, nullptr, 1, 0, 1)
 			.updateDescriptorSet(_vulkan._device);
 
-		sets[1] = _postProcessInputOutputDescriptorSets[i];
+		sets[1] = _postProcessInputOutputDescriptorSets[i + (_maxPostProcessChainLength) * _currentFrameIndex];
 
 		p.cmdBind(postProcessCmd->get());
 		vkCmdBindDescriptorSets(postProcessCmd->get(), VK_PIPELINE_BIND_POINT_COMPUTE, _postProcessPipelineLayout, 0, std::size(sets), sets, 0, nullptr);
@@ -1133,12 +1123,12 @@ void Raytracer::executePostProcessPass()
 	outputInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	outputInfo.imageView = _vulkan._swapchainImageViews[_currentSwapchainIndex];
 
-	VGM::DescriptorSetUpdater::begin(&_postProcessInputOutputDescriptorSets.back())
+	VGM::DescriptorSetUpdater::begin(&_postProcessInputOutputDescriptorSets[_postProcessInputOutputDescriptorSets.size() - 1 - _currentFrameIndex])
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &inputInfo, nullptr, 1, 0, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &outputInfo, nullptr, 1, 0, 1)
 		.updateDescriptorSet(_vulkan._device);
 
-	sets[1] = _postProcessInputOutputDescriptorSets.back();
+	sets[1] = _postProcessInputOutputDescriptorSets[_postProcessInputOutputDescriptorSets.size() - 1 - _currentFrameIndex];
 
 	_colorMapingShader.cmdBind(postProcessCmd->get());
 	vkCmdBindDescriptorSets(postProcessCmd->get(), VK_PIPELINE_BIND_POINT_COMPUTE, _postProcessPipelineLayout, 0, std::size(sets), sets, 0, nullptr);
@@ -1198,9 +1188,15 @@ void Raytracer::initSamplers()
 
 void Raytracer::updateDescriptorSets()
 {
+	_currentFrameIndex = 0;
 	updateGBufferDescriptorSets();
 	updateDefferedDescriptorSets();
 	updatePostProcessDescriptorSets();
+	_currentFrameIndex = 1;
+	updateGBufferDescriptorSets();
+	updateDefferedDescriptorSets();
+	updatePostProcessDescriptorSets();
+	_currentFrameIndex = 0;
 	//updateRaytraceDescripotrSets();
 }
 
@@ -1455,9 +1451,6 @@ void Raytracer::initDescriptorSetLayouts()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, 1)
 		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, _historyLength)//radianceHistroy
 		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, _historyLength) //velocityHistory
-		.addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, 1) //position
-		.addBinding(4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, 1) //normal
-		.addBinding(5, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, 1) //depth
 		.createDescriptorSetLayout(_vulkan._device, &_postProcessLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1505,9 +1498,9 @@ void Raytracer::initDescripotrSets()
 			.createDescriptorSet(_vulkan._device, &_postProcessDescriptorSets[i], &_postProcessLayout, _postProcessDescriptorSetAllocator);
 	}
 
-	_postProcessInputOutputDescriptorSets.resize(10);
+	_postProcessInputOutputDescriptorSets.resize((_maxPostProcessChainLength + 1) * _concurrencyCount);
 
-	for(unsigned int i = 0; i < 10; i++)
+	for(unsigned int i = 0; i < _postProcessInputOutputDescriptorSets.size(); i++)
 	{
 		VGM::DescriptorSetBuilder::begin()
 			.createDescriptorSet(_vulkan._device, &_postProcessInputOutputDescriptorSets[i], &_postProcessInputOutputLayout, _postProcessDescriptorSetAllocator);

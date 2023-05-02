@@ -192,12 +192,10 @@ struct FrameSynchro
 struct SunLight
 {
 	glm::vec3 direction;
-	float padding0;
+	float radius;
 	glm::vec3 color;
 	float strength;
 };
-
-
 
 struct PointLight
 {
@@ -322,12 +320,13 @@ private:
 	uint32_t nativeRenderingReselutionX;
 	uint32_t nativeRenderingReselutionY;
 
-	uint32_t _concurrencyCount = 1;
+	uint32_t _concurrencyCount = 2;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
 	uint32_t _maxMipMapLevels = 3;
-	uint64_t _timeout = 100000000;
+	uint64_t _timeout = UINT64_MAX;
+	uint32_t _maxPostProcessChainLength = 4;
 	
 	uint32_t _maxSunLights = 10;
 	uint32_t _maxPointLighst = 10;
@@ -338,7 +337,7 @@ private:
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 1;
 	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 64;
+	uint32_t _historyLength = 2;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;

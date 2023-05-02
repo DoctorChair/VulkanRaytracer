@@ -1,6 +1,7 @@
 struct SunLight
 {
 	vec3 direction;
+	float radius;
 	vec3 color;
 	float strength;
 };

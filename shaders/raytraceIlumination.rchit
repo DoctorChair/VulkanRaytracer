@@ -95,14 +95,6 @@ layout(location = 1) rayPayloadInEXT hitPayload incomigPayload;
 
 hitAttributeEXT vec2 attribs;
 
-uvec2 uadd_64_32(uvec2 addr, uint offset)
-{
-    uint carry;
-    addr.x = uaddCarry(addr.x, offset, carry);
-    addr.y += carry;
-    return addr;
-}
-
 void main()
 {
 	vec3 radiance = vec3(0.0);
@@ -189,7 +181,8 @@ void main()
     	  	float distance = length(lightDirection);
     	  	lightDirection = normalize(lightDirection);
     	  	float cosTheta = max(dot(lightDirection, normal), 0.0);
-			
+			if(cosTheta >= 0)
+			{
 			float radius = pointLightBuffer.pointLights[i].radius;
 			float area = 3*M_PI*pow(radius, 2.0);
 
@@ -218,7 +211,7 @@ void main()
 			vec3 lightRadiance = lightEmission.xyz * pointLightBuffer.pointLights[i].strength * cosTheta * attenuation * shadowPayload * area;
 
 			radiance = radiance + brdf * lightRadiance;
-			
+			}
 		}
 
 	for(uint i = 0; i < globalDrawData.sunLightCount; i++)
@@ -227,7 +220,8 @@ void main()
 
 		vec3 lightDirection = sunLightBuffer.sunLights[i].direction;
 		float cosTheta = dot(lightDirection, normal);
-
+		if(cosTheta >= 0)
+		{
 		traceRayEXT(topLevelAS, // acceleration structure
         shadowRayFlags,       // rayFlags
         0x01,           // cullMask
@@ -250,27 +244,29 @@ void main()
 		vec3 lightRadiance = lightColor * sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload;
 
 		radiance = radiance + brdf * lightRadiance;
+		}
 	}
-	
-	
 
-	if(incomigPayload.depth + 1 < globalDrawData.maxRecoursionDepth)
+	if(incomigPayload.depth + 1 < globalDrawData.maxRecoursionDepth && length(radiance) <= 0.001)
 	{
 	vec3 diffuseRadiance = vec3(0.0);
 	vec3 specularRadiance = vec3(0.0);
 	
-	incomigPayload.depth++;
+		incomigPayload.depth++;
 
+		if(metallic < 0.8)
     	{
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy);
     
-    	float pdfValue = lambertImportancePDF(noise.x);
-    	float ggxPdfValue = ggxImportancePDF(noise.x, roughness * roughness);
+		float ggxPdfValue = ggxImportancePDF(noise.x, roughness * roughness);
 
-    	float weight = veachPowerHeurisitk(pdfValue, ggxPdfValue, filterExponent);
-    	vec3 sampleDirection = createSampleVector(normal.xyz, 1, 2.0 * M_PI, pdfValue, noise.y);
+    	vec3 sampleDirection = createCosineWeightedHemisphereSample(normal.xyz, noise.x, noise.y * 2.0 - 0.5);
+    	float pdfValue = sqrt(1.0 - noise.x);
 
 		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
+
+		float weight = veachPowerHeurisitk(pdfValue , ggxPdfValue, filterExponent);
+		weight = weight / pdfValue;
 
 		traceRayEXT(topLevelAS, // acceleration structure
         rayFlags,       // rayFlags
@@ -282,24 +278,25 @@ void main()
         tMin,           // ray min range
         sampleDirection,  // ray direction
         tMax,           // ray max range
-        1               // payload (location = 0)
+        1               // payload (location = 1)
         );
 
 		vec3 r0 = mix(vec3(reflectance), colorTexture.xyz, metallic);
     	vec3 fresnel = fresnelSchlick(r0, cosTheta);
 		vec3 lambert = colorTexture.xyz * (vec3(1.0) - fresnel) * (1.0 - metallic);
 		
-		diffuseRadiance = diffuseRadiance + weight * (lambert /* * cosTheta */ * incomigPayload.radiance/*  / pdfValue */);
+		diffuseRadiance = diffuseRadiance + weight * (lambert * cosTheta * incomigPayload.radiance / pdfValue);
 		}
 
 		{
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.yx);
     
     	float pdfValue = ggxImportancePDF(noise.x, roughness);
-    	float lambertPDFValue =  lambertImportancePDF(noise.x);
+    	float lambertPDFValue = sqrt(1.0 - noise.x);
 
 		pdfValue = max(pdfValue, 0.001);
     	float weight = veachPowerHeurisitk(pdfValue ,lambertPDFValue, filterExponent);
+		weight = weight / pdfValue *  (float(metallic < 0.8)) + 1.0 * (float(metallic >= 0.8));
 
 		vec3 halfwayVector = createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y);
 
@@ -322,7 +319,7 @@ void main()
 		
 		vec3 brdf = ggxSpecularBRDF(gl_WorldRayDirectionEXT, reflectionDirection, normal.xyz, colorTexture.xyz, metallic, roughness, reflectance);
 
-		specularRadiance = specularRadiance + weight * ( incomigPayload.radiance * cosTheta * brdf / pdfValue); 
+		specularRadiance = specularRadiance + weight * ( incomigPayload.radiance * cosTheta * brdf); 
 		}
 	
 	incomigPayload.depth--;
