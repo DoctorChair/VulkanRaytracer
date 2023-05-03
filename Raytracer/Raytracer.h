@@ -65,11 +65,6 @@ struct DefferedBuffer
 	VkImageView colorView;
 };
 
-struct RaytraceBuffer
-{
-	VGM::Texture colorBuffer;
-	VkImageView colorView;
-};
 
 struct HistoryBuffer
 {
@@ -305,6 +300,7 @@ private:
 
 	void executeDefferedPass();
 	void executeRaytracePass();
+	void executeSeperatedRaytracePass();
 	void executeAccumulatePass();
 	void executePostProcessPass();
 
@@ -337,7 +333,7 @@ private:
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 1;
 	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 2;
+	uint32_t _historyLength = 64;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;
@@ -369,8 +365,13 @@ private:
 	RaytracingShader _raytraceShader;
 	VkPipelineLayout _raytracePipelineLayout;
 	ShaderBindingTable _shaderBindingTable;
-	std::vector<RaytraceBuffer> _raytraceBufferChain;
 	
+	
+	RaytracingShader _directIluminationShader;
+	ShaderBindingTable _directIluminationSBT;
+	RaytracingShader _indirectIluminationShader;
+	ShaderBindingTable _indirectIluminationSBT;
+
 	VkPipelineLayout _postProcessPipelineLayout;
 	std::vector<VGM::ComputeShaderProgram> _postProcessingChain;
 	VGM::ComputeShaderProgram _colorMapingShader;

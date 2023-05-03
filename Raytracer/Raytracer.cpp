@@ -81,9 +81,7 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 
 	initHistoryBuffers();
 	initBufferState();
-
 	initgBuffers();
-	initRaytraceBuffers();
 	initPostProcessBuffers();
 	initMeshBuffer();
 	initTextureArrays();
@@ -498,6 +496,12 @@ void Raytracer::initShaderBindingTable()
 {
 	_shaderBindingTable = ShaderBindingTable(_raytraceShader.get(), _raytraceShader.missShaderCount(), _raytraceShader.hitShaderCount(),
 		_vulkan._device, _vulkan._physicalDevice, _vulkan._generalPurposeAllocator);
+
+	_directIluminationSBT = ShaderBindingTable(_directIluminationShader.get(), _directIluminationShader.missShaderCount(), _directIluminationShader.hitShaderCount(),
+		_vulkan._device, _vulkan._physicalDevice, _vulkan._generalPurposeAllocator);
+
+	_indirectIluminationSBT = ShaderBindingTable(_indirectIluminationShader.get(), _indirectIluminationShader.missShaderCount(), _indirectIluminationShader.hitShaderCount(),
+		_vulkan._device, _vulkan._physicalDevice, _vulkan._generalPurposeAllocator);
 }
 
 void Raytracer::loadPlaceholderMeshAndTexture()
@@ -547,6 +551,10 @@ void Raytracer::updateGBufferDescriptorSets()
 	nearestSamplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	nearestSamplerInfo.sampler = _nearestNeighborSampler;
 
+	VkDescriptorImageInfo LowFidelitySamplerInfo = {};
+	LowFidelitySamplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	LowFidelitySamplerInfo.sampler = _lowFidelitySampler;
+
 	VkDescriptorBufferInfo drawDataInstanceInfo;
 	drawDataInstanceInfo.buffer = currentDrawDataInstanceBuffer->get();
 	drawDataInstanceInfo.offset = 0;
@@ -559,6 +567,7 @@ void Raytracer::updateGBufferDescriptorSets()
 		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo, 1, 0, 1)
 		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &linearSamplerInfo, nullptr, 1, 1, 0)
 		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &nearestSamplerInfo, nullptr, 1, 1, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLER, &LowFidelitySamplerInfo, nullptr, 1, 1, 2)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawDataInstanceInfo, 1, 2, 0)
 		.updateDescriptorSet(_vulkan._device);
 }
@@ -672,7 +681,7 @@ void Raytracer::updatePostProcessDescriptorSets()
 	for(unsigned int i = 0; i<_historyLength; i++)
 	{
 		VkDescriptorImageInfo velocityHistoryInfo;
-		velocityHistoryInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		velocityHistoryInfo.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
 		velocityHistoryInfo.imageView = _historyBuffer.velocityViews[i];
 		velocityHistoryInfo.sampler = VK_NULL_HANDLE;
 		velocityHistoryInfos[i] = velocityHistoryInfo;
@@ -683,7 +692,7 @@ void Raytracer::updatePostProcessDescriptorSets()
 	for (unsigned int i = 0; i < _historyLength; i++)
 	{
 		VkDescriptorImageInfo radianceHistoryInfo;
-		radianceHistoryInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		radianceHistoryInfo.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
 		radianceHistoryInfo.imageView = _historyBuffer.radianceViews[i];
 		radianceHistoryInfo.sampler = VK_NULL_HANDLE;
 		radianceHistoryInfos[i] = radianceHistoryInfo;
@@ -697,8 +706,8 @@ void Raytracer::updatePostProcessDescriptorSets()
 	VkDescriptorSet sets[] = { _postProcessDescriptorSets[_currentFrameIndex]};
 	VGM::DescriptorSetUpdater::begin(sets)
 		.bindBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, globalbufferInfo, 1, 0, 0)
-		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, radianceHistoryInfos.data(), nullptr, _historyLength, 0, 1)
-		.bindImage(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, velocityHistoryInfos.data(), nullptr, _historyLength, 0, 2)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, radianceHistoryInfos.data(), nullptr, _historyLength, 0, 1)
+		.bindImage(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, velocityHistoryInfos.data(), nullptr, _historyLength, 0, 2)
 		.updateDescriptorSet(_vulkan._device);
 }
 
@@ -864,7 +873,8 @@ void Raytracer::executeDefferedPass()
 	vkCmdPipelineBarrier2(defferedCmd->get(), &dependency);
 
 	subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(defferedCmd->get(), subresource, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+	_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(defferedCmd->get(), subresource, 
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_ACCESS_NONE, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 	
 
@@ -926,7 +936,7 @@ void Raytracer::executeDefferedPass()
 		VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
 
 	_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(defferedCmd->get(), subresource, 
-		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, 
 		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
@@ -955,7 +965,6 @@ void Raytracer::executeRaytracePass()
 		VkSemaphore defferedSemaphore = _frameSynchroStructs[_currentFrameIndex]._defferedRenderSemaphore;
 
 		GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
-		RaytraceBuffer* currentRaytraceBuffer = &_raytraceBufferChain[_currentFrameIndex];
 
 		TLAS* currentTopLevelAccelStructure = &_accelerationStructure.topLevelAccelStructures[_currentFrameIndex];
 		VGM::Buffer* currentInstanceBuffer = &_accelerationStructure.instanceBuffers[_currentFrameIndex];
@@ -995,8 +1004,8 @@ void Raytracer::executeRaytracePass()
 		subresource.layerCount = 1;
 		subresource.levelCount = 1;
 		
-		_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(raytraceCmd->get(), subresource,
-			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+		_historyBuffer.radianceHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(raytraceCmd->get(), subresource,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT,
 			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
 
 		_raytraceShader.cmdBind(raytraceCmd->get());
@@ -1012,21 +1021,9 @@ void Raytracer::executeRaytracePass()
 			&hitRegion, &callableRegion,
 			nativeWidth, nativeHeight, _maxRecoursionDepth);
 
-		_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(raytraceCmd->get(), subresource,
-			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		_historyBuffer.radianceHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(raytraceCmd->get(), subresource,
+			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
-		currentGBuffer->normalBuffer.cmdTransitionLayout(raytraceCmd->get(), subresource,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
-			VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
-		currentGBuffer->positionBuffer.cmdTransitionLayout(raytraceCmd->get(), subresource,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
-			VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 		raytraceCmd->end();
 
@@ -1037,10 +1034,94 @@ void Raytracer::executeRaytracePass()
 	
 }
 
+void Raytracer::executeSeperatedRaytracePass()
+{
+	VGM::CommandBuffer* raytraceCmd = &_raytraceRenderCommandBuffers[_currentFrameIndex];
+
+	VkSemaphore raytraceSemaphore = _frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore;
+	VkSemaphore defferedSemaphore = _frameSynchroStructs[_currentFrameIndex]._defferedRenderSemaphore;
+
+	GBuffer* currentGBuffer = &_gBufferChain[_currentFrameIndex];
+
+	TLAS* currentTopLevelAccelStructure = &_accelerationStructure.topLevelAccelStructures[_currentFrameIndex];
+	VGM::Buffer* currentInstanceBuffer = &_accelerationStructure.instanceBuffers[_currentFrameIndex];
+
+	VkDescriptorSet sets[] = {
+		_globalDescriptorSets[_currentFrameIndex],
+		_raytracer1DescriptorSets[_currentFrameIndex],
+		_raytracer2DescriptorSets[_currentFrameIndex],
+		_lightDescripotrSets[_currentFrameIndex],
+		_samplerDescriptorSets[_currentFrameIndex],
+		_drawInstanceDescriptorSets[_currentFrameIndex],
+		_textureDescriptorSets[_currentFrameIndex]
+	};
+
+	VK_CHECK(raytraceCmd->begin(nullptr, 0, _vulkan._device));
+
+	void* ptr = currentInstanceBuffer->map(_vulkan._generalPurposeAllocator);
+	currentInstanceBuffer->memcopy(ptr, _accelerationStructure._instanceTransferCache.data(),
+		sizeof(VkAccelerationStructureInstanceKHR) * _accelerationStructure._instanceTransferCache.size());
+	currentInstanceBuffer->unmap(_vulkan._generalPurposeAllocator);
+
+	currentInstanceBuffer->cmdMemoryBarrier(raytraceCmd->get(), VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0);
+
+	VkDeviceAddress firstAddress = currentInstanceBuffer->getDeviceAddress(_vulkan._device);
+
+	currentTopLevelAccelStructure->cmdUpdateTLAS(_accelerationStructure._instanceTransferCache.size(),
+		firstAddress, _vulkan._physicalDevice, _vulkan._device, _vulkan._generalPurposeAllocator, raytraceCmd->get());
+
+
+	updateRaytraceDescripotrSets();
+
+	VkImageSubresourceRange subresource;
+	subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	subresource.baseArrayLayer = 0;
+	subresource.baseMipLevel = 0;
+	subresource.layerCount = 1;
+	subresource.levelCount = 1;
+
+	_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(raytraceCmd->get(), subresource,
+		VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_NONE, VK_ACCESS_SHADER_WRITE_BIT,
+		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+
+	_raytraceShader.cmdBind(raytraceCmd->get());
+	vkCmdBindDescriptorSets(raytraceCmd->get(), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _raytracePipelineLayout, 0, std::size(sets), sets, 0, nullptr);
+
+	VkStridedDeviceAddressRegionKHR directCallableRegion = {};
+	VkStridedDeviceAddressRegionKHR directRaygenRegion = _shaderBindingTable.getRaygenRegion();
+	VkStridedDeviceAddressRegionKHR directhitRegion = _shaderBindingTable.getHitRegion();
+	VkStridedDeviceAddressRegionKHR directMissRegion = _shaderBindingTable.getMissRegion();
+
+	vkCmdTraceRaysKHR(raytraceCmd->get(),
+		&directRaygenRegion, &directMissRegion,
+		&directhitRegion, &directCallableRegion,
+		nativeWidth * 2, nativeHeight * 2, _maxRecoursionDepth);
+
+	VkStridedDeviceAddressRegionKHR indirectCallableRegion = {};
+	VkStridedDeviceAddressRegionKHR indirectRaygenRegion = _shaderBindingTable.getRaygenRegion();
+	VkStridedDeviceAddressRegionKHR indirecthitRegion = _shaderBindingTable.getHitRegion();
+	VkStridedDeviceAddressRegionKHR indirectMissRegion = _shaderBindingTable.getMissRegion();
+
+	vkCmdTraceRaysKHR(raytraceCmd->get(),
+		&indirectRaygenRegion, &indirectMissRegion,
+		&indirecthitRegion, &indirectCallableRegion,
+		nativeWidth, nativeHeight, _maxRecoursionDepth);
+
+	_historyBuffer.velocityHistoryBuffer[_historyBuffer.currentIndex].cmdTransitionLayout(raytraceCmd->get(), subresource,
+		VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+	raytraceCmd->end();
+
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR };
+	VK_CHECK(raytraceCmd->submit(&_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1, &_frameSynchroStructs[_currentFrameIndex]._defferedRenderSemaphore, 1, waitStages, nullptr, _vulkan._computeQueue));
+
+	_accelerationStructure._instanceTransferCache.clear();
+}
+
 void Raytracer::executePostProcessPass()
 {
-	RaytraceBuffer* currentRaytraceBuffer = &_raytraceBufferChain[_currentFrameIndex];
-
 	VGM::CommandBuffer* postProcessCmd = &_postProcessCommandBuffers[_currentFrameIndex];
 	VkDescriptorSet currentpostProcessDescriptorSet = _postProcessDescriptorSets[_currentFrameIndex];
 
@@ -1054,7 +1135,8 @@ void Raytracer::executePostProcessPass()
 	VkDescriptorSet sets[] =
 	{
 		_postProcessDescriptorSets[_currentFrameIndex],
-		_postProcessInputOutputDescriptorSets[_currentFrameIndex]
+		_postProcessInputOutputDescriptorSets[_currentFrameIndex],
+		_samplerDescriptorSets[_currentFrameIndex]
 	};
 	
 	VkImageSubresourceRange subresource;
@@ -1186,6 +1268,7 @@ void Raytracer::initSamplers()
 	vkCreateSampler(_vulkan._device, &createInfo, nullptr, &_lowFidelitySampler);
 }
 
+
 void Raytracer::updateDescriptorSets()
 {
 	_currentFrameIndex = 0;
@@ -1242,11 +1325,11 @@ void Raytracer::initHistoryBuffers()
 
 	 for(unsigned int i = 0; i<_historyLength; i++)
 	 {
-		 _historyBuffer.velocityHistoryBuffer[i] = VGM::Texture(VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+		 _historyBuffer.velocityHistoryBuffer[i] = VGM::Texture(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			 { nativeWidth, nativeHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		 _historyBuffer.velocityHistoryBuffer[i].createImageView(0, 1, 0, 1, _vulkan._device, &_historyBuffer.velocityViews[i]);
 
-		 _historyBuffer.radianceHistoryBuffer[i] = VGM::Texture(VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_STORAGE_BIT,
+		 _historyBuffer.radianceHistoryBuffer[i] = VGM::Texture(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			{ nativeWidth, nativeHeight, 1 }, 1, 1, _vulkan._gpuAllocator);
 		 _historyBuffer.radianceHistoryBuffer[i].createImageView(0, 1, 0, 1, _vulkan._device, &_historyBuffer.radianceViews[i]);
 	 }
@@ -1290,11 +1373,11 @@ void Raytracer::initBufferState()
 	for(unsigned int i = 0; i<_historyBuffer.velocityHistoryBuffer.size(); i++)
 	{
 		_historyBuffer.velocityHistoryBuffer[i].cmdTransitionLayout(_transferCommandBuffer.get(), subresource,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_NONE, VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_NONE, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 		_historyBuffer.radianceHistoryBuffer[i].cmdTransitionLayout(_transferCommandBuffer.get(), subresource,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_NONE, VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_NONE, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 	}
 
@@ -1367,17 +1450,6 @@ void Raytracer::initDefferedBuffers()
 	}
 }
 
-void Raytracer::initRaytraceBuffers()
-{
-	_raytraceBufferChain.resize(_concurrencyCount);
-	for (auto& r : _raytraceBufferChain)
-	{
-		r.colorBuffer = VGM::Texture(VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_TYPE_3D, VK_IMAGE_USAGE_STORAGE_BIT,
-			{ nativeWidth, nativeHeight, _historyLength }, 1, 1, _vulkan._gpuAllocator);
-		r.colorBuffer.createImageView(0, 1, 0, 1, _vulkan._device, &r.colorView);
-	}
-}
-
 void Raytracer::initDescriptorSetAllocator()
 {
 	std::vector<VkDescriptorPoolSize> poolSizes = {
@@ -1406,9 +1478,14 @@ void Raytracer::initDescriptorSetLayouts()
 		.createDescriptorSetLayout(_vulkan._device, &_globalLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
-		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
+		.addBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT 
+			| VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
 			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
+		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT 
+			| VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
+			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
+		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLER, nullptr, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT 
+			| VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR
 			| VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1)
 		.createDescriptorSetLayout(_vulkan._device, &_samplerLayout);
 
@@ -1449,8 +1526,8 @@ void Raytracer::initDescriptorSetLayouts()
 
 	VGM::DescriptorSetLayoutBuilder::begin()
 		.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, 1)
-		.addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, _historyLength)//radianceHistroy
-		.addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, _historyLength) //velocityHistory
+		.addBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, _historyLength)//radianceHistroy
+		.addBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr, VK_SHADER_STAGE_COMPUTE_BIT, _historyLength) //velocityHistory
 		.createDescriptorSetLayout(_vulkan._device, &_postProcessLayout);
 
 	VGM::DescriptorSetLayoutBuilder::begin()
@@ -1529,7 +1606,7 @@ void Raytracer::initGBufferShader()
 
 	VGM::PipelineConfigurator configurator;
 	std::vector<VkFormat> renderingColorFormats = { VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT
-		, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
+		, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT };
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -1592,11 +1669,27 @@ void Raytracer::initRaytraceShader()
 	uint32_t numSamplers = 10;
 
 	_raytraceShader = RaytracingShader(sources, _raytracePipelineLayout, _vulkan._device, _maxRecoursionDepth, numSamplers);
+
+	std::vector<std::pair<std::string, VkShaderStageFlagBits>> directSources = {
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationDirectRGEN.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceShadowRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR}
+	};
+
+	_directIluminationShader = RaytracingShader(directSources, _raytracePipelineLayout, _vulkan._device, _maxRecoursionDepth, numSamplers);
+
+	std::vector<std::pair<std::string, VkShaderStageFlagBits>> indirectSources = {
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationIndirectRGEN.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceShadowRMISS.spv", VK_SHADER_STAGE_MISS_BIT_KHR},
+		{"C:\\Users\\Eric\\projects\\VulkanRaytracing\\shaders\\SPIRV\\raytraceIluminationRCHIT.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}
+	};
+
+	_indirectIluminationShader = RaytracingShader(indirectSources, _raytracePipelineLayout, _vulkan._device, _maxRecoursionDepth, numSamplers);
 }
 
 void Raytracer::initPostProcessingChain()
 {
-	VkDescriptorSetLayout layouts[] = { _postProcessLayout, _postProcessInputOutputLayout };
+	VkDescriptorSetLayout layouts[] = { _postProcessLayout, _postProcessInputOutputLayout, _samplerLayout };
 
 	VkPipelineLayoutCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

@@ -76,6 +76,7 @@ layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
 
 layout(set = 4, binding = 0) uniform sampler linearSampler;
 layout(set = 4, binding = 1) uniform sampler nearestSampler;
+layout(set = 4, binding = 2) uniform sampler lowFidelitySampler;
 
 layout(std430, set = 5, binding = 0) readonly buffer DrawInstanceBuffer{
 	drawInstanceData instanceData[];
@@ -142,11 +143,11 @@ void main()
 	float tMin = 0.01;
 	float tMax = 100.0;
 
-	vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], linearSampler), texCoord);
-	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], linearSampler), texCoord);
-	vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], linearSampler), texCoord);
-    vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], linearSampler), texCoord);
-    vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], linearSampler), texCoord);
+	vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], nearestSampler), texCoord);
+	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], nearestSampler), texCoord);
+	vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], nearestSampler), texCoord);
+    vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], nearestSampler), texCoord);
+    vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], nearestSampler), texCoord);
 	vec3 normal;
 	
 	if(material.normalIndex != 0)

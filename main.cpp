@@ -29,11 +29,11 @@ int main(int argc, char* argv[])
 
 	ModelLoader loader;
 	
-	ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
+	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
 
 	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
 
-	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
+	ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
 
 	ModelData pointSource = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\LightSources\\\LightSource.gltf");
 
@@ -225,8 +225,8 @@ int main(int argc, char* argv[])
 		raytracer.drawPointLight(p);
 		/*raytracer.drawPointLight(point2);
 		raytracer.drawPointLight(point3);*/
-		raytracer.drawSpotLight(spot);
-		raytracer.drawSunLight(sun);
+		//raytracer.drawSpotLight(spot);
+		//raytracer.drawSunLight(sun);
 		raytracer.update();
 	}
 
