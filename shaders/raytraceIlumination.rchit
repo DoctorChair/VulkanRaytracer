@@ -55,10 +55,6 @@ layout(std430, set = 2, binding = 2) buffer VertexBuffer
 	uvec2 instanceAddress;
 }meshBufferAddresses;
 
-layout(std430, set = 2, binding = 4) readonly buffer sampleSequenceBuffer{
-  vec2 samples[];
-} sampleSequence;
-
 layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
 
 	SunLight sunLights[];

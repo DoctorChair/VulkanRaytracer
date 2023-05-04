@@ -176,10 +176,10 @@ struct CameraData
 
 struct FrameSynchro
 {
-	VkSemaphore _offsceenRenderSemaphore;
 	VkSemaphore _defferedRenderSemaphore;
 	VkSemaphore _raytraceSemaphore;
 	VkSemaphore _postProcessSemaphore;
+	VkSemaphore _guiSemaphore;
 	VkSemaphore _presentSemaphore;
 	VkFence _frameFence;
 };
@@ -251,13 +251,14 @@ public:
 	void drawPointLight(PointLightSourceInstance light);
 	void drawSpotLight(SpotLight light);
 	void setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position);
+	void drawDebugGui(SDL_Window* window);
+	void handleGuiEvents(SDL_Event* event);
 	void update();
-
-	void drawSingleFrame(const std::string& ragetPath);
 
 	void destroy();
 
 private:
+	void initGui(SDL_Window* window, int width, int height);
 	void initDescriptorSetAllocator();
 	void initDescriptorSetLayouts();
 	void initDescripotrSets();
@@ -270,7 +271,6 @@ private:
 	void initSyncStructures();
 	void initDataBuffers();
 	void initLightBuffers();
-
 	void initMeshBuffer();
 	void initgBuffers();
 	void initDefferedBuffers();
@@ -303,10 +303,9 @@ private:
 	void executeSeperatedRaytracePass();
 	void executeAccumulatePass();
 	void executePostProcessPass();
+	void executeGuiPass();
 
-	float genHaltonSample(uint32_t base, uint32_t index);
-	void genHaltonSequence(uint32_t a, uint32_t b, uint32_t length);
-
+private:
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
 	VGM::VulkanContext _vulkan;
@@ -366,7 +365,10 @@ private:
 	VkPipelineLayout _raytracePipelineLayout;
 	ShaderBindingTable _shaderBindingTable;
 	
-	
+	VkRenderPass _guiRenderpass;
+	std::vector<VkFramebuffer> _guiFramebuffers;
+	VkDescriptorPool _guiPool;
+
 	RaytracingShader _directIluminationShader;
 	ShaderBindingTable _directIluminationSBT;
 	RaytracingShader _indirectIluminationShader;
@@ -383,7 +385,7 @@ private:
 	uint32_t _currentSwapchainIndex = 0;
 
 	VGM::CommandBufferAllocator _renderCommandBufferAllocator;
-	std::vector<VGM::CommandBuffer> _offsceenRenderCommandBuffers;
+	std::vector<VGM::CommandBuffer> _guiCommandBuffers;
 	std::vector<VGM::CommandBuffer> _defferedRenderCommandBuffers;
 	std::vector<VGM::CommandBuffer> _postProcessCommandBuffers;
 

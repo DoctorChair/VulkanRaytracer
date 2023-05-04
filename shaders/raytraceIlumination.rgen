@@ -45,9 +45,6 @@ layout(set = 1, binding = 5) uniform sampler2D primaryRayEmissionTexture;
 
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 2, binding = 1, rgba32f) uniform image2D image;
-layout(std430, set = 2, binding = 4) readonly buffer sampleSequenceBuffer{
-  vec2 samples[];
-} sampleSequence;
 
 layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
 	SunLight sunLights[];

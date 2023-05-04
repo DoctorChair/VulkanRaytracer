@@ -29,11 +29,11 @@ int main(int argc, char* argv[])
 
 	ModelLoader loader;
 	
-	ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
+	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
 
 	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
 
-	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
+	ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
 
 	ModelData pointSource = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\LightSources\\\LightSource.gltf");
 
@@ -152,6 +152,8 @@ int main(int argc, char* argv[])
 		//Handle events on queue
 		while (SDL_PollEvent(&e) != 0)
 		{
+			raytracer.handleGuiEvents(&e);
+
 			//User requests quit
 			if (e.type == SDL_QUIT)
 			{
@@ -227,6 +229,9 @@ int main(int argc, char* argv[])
 		raytracer.drawPointLight(point3);*/
 		//raytracer.drawSpotLight(spot);
 		//raytracer.drawSunLight(sun);
+
+		raytracer.drawDebugGui(window);
+
 		raytracer.update();
 	}
 
