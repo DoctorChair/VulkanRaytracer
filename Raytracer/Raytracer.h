@@ -333,7 +333,7 @@ private:
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 1;
 	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 64;
+	uint32_t _historyLength = 32;
 
 	uint32_t nativeWidth = 1920/2;
 	uint32_t nativeHeight = 1080/2;

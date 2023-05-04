@@ -259,8 +259,8 @@ void main()
     	{
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy);
     
-		float ggxPdfValue = ggxImportancePDF(noise.x, roughness * roughness);
-
+		float ggxPdfValue = ggxImportanceCDF(noise.x, roughness * roughness);
+		ggxPdfValue = ggxImportancePDF(ggxPdfValue, roughness * roughness);
     	vec3 sampleDirection = createCosineWeightedHemisphereSample(normal.xyz, noise.x, noise.y * 2.0 - 0.5);
     	float pdfValue = sqrt(1.0 - noise.x);
 
@@ -292,12 +292,13 @@ void main()
 		{
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.yx);
     
-    	float pdfValue = ggxImportancePDF(noise.x, roughness);
+    	float pdfValue = ggxImportanceCDF(noise.x, roughness);
     	float lambertPDFValue = sqrt(1.0 - noise.x);
 
 		pdfValue = max(pdfValue, 0.001);
-    	float weight = veachPowerHeurisitk(pdfValue ,lambertPDFValue, filterExponent);
-		weight = weight / pdfValue *  (float(metallic < 0.8)) + 1.0 * (float(metallic >= 0.8));
+		float p = ggxImportancePDF(pdfValue, roughness * roughness);
+    	float weight = veachPowerHeurisitk(p ,lambertPDFValue, filterExponent);
+		weight = weight / p *  (float(metallic < 0.8)) + 1.0 * (float(metallic >= 0.8));
 
 		vec3 halfwayVector = createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y);
 

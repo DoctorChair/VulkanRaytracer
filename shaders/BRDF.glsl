@@ -136,14 +136,15 @@ vec3 createCosineWeightedHemisphereSample(vec3 originVector, float randomTheta, 
 	return normalize(tbn * vec3(x, y, z));
 }
 
-float lambertImportancePDF(float x)
+float ggxImportanceCDF(float x, float alpha)
 {
-	return asin(sqrt(x));
+	return atan((alpha * sqrt(x / sqrt(1.0 - x))));
 }
 
-float ggxImportancePDF(float x, float alpha)
+float ggxImportancePDF(float theta, float alpha)
 {
-	return atan((alpha * sqrt(x)) / sqrt(1.0 - x));
+	float alpha2 = max(alpha * alpha, 0.0001);
+	return (alpha2 * cos(theta) * sin(theta)) / (M_PI * pow(((alpha2 - 1) * pow(cos(theta), 2) + 1), 2));
 }
 
 float veachBalanceHeuristik(float pdf, float otherPDF)
