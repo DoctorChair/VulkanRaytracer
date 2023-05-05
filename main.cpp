@@ -88,25 +88,6 @@ int main(int argc, char* argv[])
 
 	loader.freeAssets();
 
-	PointLight point = {};
-	point.radius = 0.05f;
-	point.position = glm::vec3(0.0f, 10.0f, 0.0f);
-	point.color = glm::vec3(1.0f, 1.0f, 0.8f);
-	point.strength = 5000.0f;
-	point.emissionIndex = 2;
-
-	PointLight point2 = {};
-	point2.radius = 0.2f;
-	point2.position = glm::vec3(0.0f, 8.0f, 0.0f);
-	point2.color = glm::vec3(1.0f, 1.0f, 0.8f);
-	point2.strength = 50.0f;
-
-	PointLight point3 = {};
-	point3.radius = 0.2f;
-	point3.position = glm::vec3(0.0f, 6.0f, 0.0f);
-	point3.color = glm::vec3(1.0f, 1.0f, 0.8f);
-	point3.strength = 5000.0f;
-
 	SunLight sun = {};
 	sun.color = glm::vec3(1.0f , 1.0f, 5.0f);
 	sun.direction = glm::vec3(1.0f, -1.0f, 0.0f);
@@ -141,6 +122,8 @@ int main(int argc, char* argv[])
 	float deltaRight = 0.0f;
 
 	camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
+
+	bool cameraActive = true;
 
 	while (!quit)
 	{
@@ -184,6 +167,9 @@ int main(int argc, char* argv[])
 				case SDLK_a:
 					deltaRight = -1.0f;
 					break;
+				case SDLK_LCTRL:
+					cameraActive = true;
+					break;
 				}
 			}
 			if (e.type == SDL_KEYUP)
@@ -202,6 +188,9 @@ int main(int argc, char* argv[])
 				case SDLK_a:
 					deltaRight = 0.0f;
 					break;
+				case SDLK_LCTRL:
+					cameraActive = false;
+					break;
 				}
 			}
 			if (e.type == SDL_WINDOWEVENT)
@@ -213,8 +202,11 @@ int main(int argc, char* argv[])
 			}
 		}
 
-		camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
-		raytracer.setCamera(camera._viewMatrix, camera._projectionMatrix, camera._position);
+		if (!cameraActive)
+		{
+			camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
+			raytracer.setCamera(camera._viewMatrix, camera._projectionMatrix, camera._position);
+		}
 
 		uint32_t id = 0;
 		for(unsigned int i = 0; i<testScene.size(); i++)
@@ -225,10 +217,6 @@ int main(int argc, char* argv[])
 		}
 		
 		raytracer.drawPointLight(p);
-		/*raytracer.drawPointLight(point2);
-		raytracer.drawPointLight(point3);*/
-		//raytracer.drawSpotLight(spot);
-		//raytracer.drawSunLight(sun);
 
 		raytracer.drawDebugGui(window);
 

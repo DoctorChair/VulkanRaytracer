@@ -19,16 +19,13 @@ layout(set = 0, binding = 0) uniform  CameraBuffer{
 } cameraData;
 
 layout(set = 0, binding = 1) uniform  RenderBuffer{
-	float fog;
 	uint sunLightCount;
 	uint pointLightCount;
-	uint spotLightCount;
 	uint maxRecoursionDepth;
 	uint maxDiffuseSampleCount;
 	uint maxSpecularSampleCount;
 	uint maxShadowRaySampleCount;
 	uint noiseSampleTextureIndex;
-	uint sampleSequenceLength;
 	uint frameNumber;
 	uint historyLength;
 	uint historyIndex;
@@ -65,11 +62,6 @@ layout(std430, set = 3, binding = 1) readonly buffer PointBuffer{
 	PointLight pointLights[];
 } pointLightBuffer;
 
-layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
-
-	SpotLight spotLights[];
-} spotLightBuffer; 
-
 layout(set = 4, binding = 0) uniform sampler linearSampler;
 layout(set = 4, binding = 1) uniform sampler nearestSampler;
 layout(set = 4, binding = 2) uniform sampler lowFidelitySampler;
@@ -82,9 +74,8 @@ layout(set = 6, binding = 0) uniform texture2D textures[1024];
 
 struct hitPayload
 {
-  bool miss;
+	  uint depth;
   vec3 radiance;
-  uint depth;
 };
 
 layout(location = 0) rayPayloadEXT float shadowPayload;

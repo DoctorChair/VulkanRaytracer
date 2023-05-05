@@ -1,0 +1,42 @@
+#version 460
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform RenderBuffer{
+	
+	uint sunLightCount;
+	uint pointLightCount;
+  	uint maxRecoursionDepth;
+  	uint maxDiffuseSampleCount;
+  	uint maxSpecularSampleCount;
+  	uint maxShadowRaySampleCount;
+  	uint noiseSampleTextureIndex;
+	uint frameNumber;
+	uint historyLength;
+	uint historyIndex;
+	uint nativeResolutionWidth;
+	uint nativeResolutionHeight;
+	uint environmentTextureIndex;
+} globalDrawData;
+
+
+layout(set = 0, binding = 3) uniform texture2D directIlumination;
+layout(set = 0, binding = 4) uniform texture2D indirectIlumination; 
+layout(set = 0, binding = 5, rgba16f) uniform writeonly image2D outputImage; 
+
+layout(set = 2, binding = 0) uniform sampler linearSampler;
+layout(set = 2, binding = 1) uniform sampler nearestSampler;
+layout(set = 2, binding = 2) uniform sampler lowFidelitySampler;
+
+void main()
+{
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+	vec2 uv = vec2(coord) / vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight);
+    vec2 uv2 = vec2(coord) / vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight) / 2;
+
+    uint index = globalDrawData.historyIndex;
+
+    vec4 combined = texture(sampler2D(directIlumination, linearSampler), uv) + texture(sampler2D(indirectIlumination, linearSampler), uv2);
+	
+    imageStore(outputImage, coord, combined);
+}

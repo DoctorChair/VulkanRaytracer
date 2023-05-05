@@ -35,16 +35,13 @@ layout(set = 0, binding = 0) uniform  CameraBuffer{
 } cameraData;
 
 layout(set = 0, binding = 1) uniform  RenderBuffer{
-	float fog;
 	uint sunLightCount;
 	uint pointLightCount;
-	uint spotLightCount;
   	uint maxRecoursionDepth;
   	uint maxDiffuseSampleCount;
   	uint maxSpecularSampleCount;
   	uint maxShadowRaySampleCount;
   	uint noiseSampleTextureIndex;
-	uint sampleSequenceLength;
 	uint frameNumber;
 	uint historyLength;
 	uint historyIndex;

@@ -144,16 +144,13 @@ struct Model
 
 struct GlobalRenderData
 {
-	float fog;
 	uint32_t sunLightCount;
 	uint32_t pointLightCount;
-	uint32_t spotLightCount;
 	uint32_t maxRecoursionDepth;
 	uint32_t maxDiffuseSampleCount;
 	uint32_t maxSpecularSampleCount;
 	uint32_t maxShadowRaySampleCount;
 	uint32_t noiseSampleTextureIndex;
-	uint32_t sampleSequenceLength;
 	uint32_t frameNumber;
 	uint32_t historyLength;
 	uint32_t historyIndex;
@@ -226,6 +223,25 @@ struct PostProcessLeapfrogBuffer
 	std::vector<VkImageView> views;
 };
 
+struct RaytracingBackbuffer
+{
+	VGM::Texture directIluminationBackbuffer;
+	VkImageView directIluminationView;
+	VGM::Texture indirectIluminationBackbuffer;
+	VkImageView indirectIluminationView;
+};
+
+struct PipelineMeasurements
+{
+	float timestampPeriod = 0.0f;
+	std::vector<VkQueryPool> frameQuerryPools;
+	std::vector<uint64_t> _gBufferPassIntervals;
+	std::vector<uint64_t> _raytracePassIntervals;
+	std::vector<uint64_t> _postProcessPassIntervals;
+	std::vector<uint64_t> _guiPassIntervals;
+	std::vector<uint64_t> _timesScale;
+};
+ 
 class Raytracer
 {
 public:
@@ -259,6 +275,7 @@ public:
 
 private:
 	void initGui(SDL_Window* window, int width, int height);
+	void initQueryPool();
 	void initDescriptorSetAllocator();
 	void initDescriptorSetLayouts();
 	void initDescripotrSets();
@@ -275,6 +292,7 @@ private:
 	void initgBuffers();
 	void initDefferedBuffers();
 	void initRaytraceBuffers();
+	void initRaytracingBackBuffers();
 	void initHistoryBuffers();
 	void initPostProcessBuffers();
 	void initPresentFramebuffers();
@@ -305,6 +323,8 @@ private:
 	void executePostProcessPass();
 	void executeGuiPass();
 
+	void getTimestamps();
+
 private:
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
 
@@ -316,6 +336,7 @@ private:
 	uint32_t nativeRenderingReselutionY;
 
 	uint32_t _concurrencyCount = 2;
+	uint32_t _frameMeasurementPeriod = 1000;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -331,13 +352,17 @@ private:
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 1;
-	uint32_t _sampleSequenceLength = 2;
-	uint32_t _historyLength = 32;
+	uint32_t _historyLength = 24;
 
-	uint32_t nativeWidth = 1920/2;
-	uint32_t nativeHeight = 1080/2;
+	uint32_t nativeWidth = 1920;
+	uint32_t nativeHeight = 1080;
 
 	uint32_t _frameNumber = 0;
+
+	bool drawIluminatenSeperated = true;
+	bool drawGUI = true;
+
+	PipelineMeasurements _measurments;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;
@@ -361,18 +386,23 @@ private:
 	VkPipelineLayout _defferedPipelineLayout;
 	std::vector<DefferedBuffer> _defferdBufferChain;
 
+	std::vector<RaytracingBackbuffer> _raytracingBackbuffers;
+
 	RaytracingShader _raytraceShader;
 	VkPipelineLayout _raytracePipelineLayout;
 	ShaderBindingTable _shaderBindingTable;
 	
-	VkRenderPass _guiRenderpass;
-	std::vector<VkFramebuffer> _guiFramebuffers;
-	VkDescriptorPool _guiPool;
+	VGM::ComputeShaderProgram _combineBackBufferShader;
 
 	RaytracingShader _directIluminationShader;
 	ShaderBindingTable _directIluminationSBT;
 	RaytracingShader _indirectIluminationShader;
 	ShaderBindingTable _indirectIluminationSBT;
+
+	VkRenderPass _guiRenderpass;
+	std::vector<VkFramebuffer> _guiFramebuffers;
+	VkDescriptorPool _guiPool;
+	bool _guiActive;
 
 	VkPipelineLayout _postProcessPipelineLayout;
 	std::vector<VGM::ComputeShaderProgram> _postProcessingChain;
@@ -423,7 +453,7 @@ private:
 	std::vector<SpotLight> _spotLightTransferCache;
 
 	CameraData _cameraData = {glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::vec3(0.0f)};
-	GlobalRenderData _globalRenderData = { 0.0f, 0, 0, 0 };
+	GlobalRenderData _globalRenderData = { 0, 0, 0 };
 
 	VGM::DescriptorSetAllocator _offsecreenDescriptorSetAllocator;
 	VGM::DescriptorSetAllocator _textureDescriptorSetAllocator;

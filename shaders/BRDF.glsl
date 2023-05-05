@@ -144,7 +144,7 @@ float ggxImportanceCDF(float x, float alpha)
 float ggxImportancePDF(float theta, float alpha)
 {
 	float alpha2 = max(alpha * alpha, 0.0001);
-	return (alpha2 * cos(theta) * sin(theta)) / (M_PI * pow(((alpha2 - 1) * pow(cos(theta), 2) + 1), 2));
+	return (alpha2 * cos(theta)) / (M_PI * pow(((alpha2 - 1) * pow(cos(theta), 2) + 1), 2));
 }
 
 float veachBalanceHeuristik(float pdf, float otherPDF)

@@ -27,6 +27,10 @@ ShaderBindingTable.cpp
 "${CMAKE_SOURCE_DIR}/external/imGui/imgui_widgets.cpp"
 "${CMAKE_SOURCE_DIR}/external/imGui/backends/imgui_impl_vulkan.cpp"
 "${CMAKE_SOURCE_DIR}/external/imGui/backends/imgui_impl_sdl2.cpp"
+"${CMAKE_SOURCE_DIR}/external/imGui/implot.cpp"
+"${CMAKE_SOURCE_DIR}/external/imGui/implot.h"
+"${CMAKE_SOURCE_DIR}/external/imGui/implot_items.cpp"
+"${CMAKE_SOURCE_DIR}/external/imGui/implot_demo.cpp"
 )
 
 #add includes

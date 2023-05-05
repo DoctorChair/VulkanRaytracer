@@ -7,22 +7,19 @@
 
 
 layout(set = 0, binding = 1) uniform  RenderBuffer{
-	float fog;
 	uint sunLightCount;
 	uint pointLightCount;
-	uint spotLightCount;
 	uint maxRecoursionDepth;
 	uint maxDiffuseSampleCount;
 	uint maxSpecularSampleCount;
 	uint maxShadowRaySampleCount;
 	uint noiseSampleTextureIndex;
-	uint sampleSequenceLength;
 	uint frameNumber;
 	uint historyLength;
 	uint historyIndex;
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
-  uint environmentTextureIndex;
+  	uint environmentTextureIndex;
 } globalDrawData;
 
 
@@ -33,9 +30,8 @@ layout(set = 6, binding = 0) uniform texture2D textures[1024];
 
 struct hitPayload
 {
-  bool miss;
+	  uint depth;
   vec3 radiance;
-  uint depth;
 };
 
 layout(location = 1) rayPayloadInEXT hitPayload incomigPayload;
@@ -47,5 +43,4 @@ void main()
   vec4 envColor = texture(sampler2D(textures[globalDrawData.environmentTextureIndex], albedoSampler), sphereUV);
 
   incomigPayload.radiance = envColor.xyz;
-  incomigPayload.miss = true;
 }

@@ -17,16 +17,13 @@ layout(set = 0, binding = 0) uniform  CameraBuffer{
 } cameraData;
 
 layout(set = 0, binding = 1) uniform  RenderBuffer{
-	float fog;
 	uint sunLightCount;
 	uint pointLightCount;
-	uint spotLightCount;
   uint maxRecoursionDepth;
   uint maxDiffuseSampleCount;
   uint maxSpecularSampleCount;
   uint maxShadowRaySampleCount;
   uint noiseSampleTextureIndex;
-  uint sampleSequenceLength;
   uint frameNumber;
   uint historyLength;
 	uint historyIndex;
@@ -44,7 +41,7 @@ layout(set = 1, binding = 4) uniform sampler2D primaryRayPositionTexture;
 layout(set = 1, binding = 5) uniform sampler2D primaryRayEmissionTexture;
 
 layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout(set = 2, binding = 1, rgba32f) uniform image2D image;
+layout(set = 2, binding = 1, rgba16f) uniform image2D image;
 
 layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
 	SunLight sunLights[];
@@ -54,9 +51,6 @@ layout(std430, set = 3, binding = 1) readonly buffer PointBuffer{
 	PointLight pointLights[];
 } pointLightBuffer;
 
-layout(std430, set = 3, binding = 2) readonly buffer SpotBuffer{
-	SpotLight spotLights[];
-} spotLightBuffer; 
 
 layout(set = 4, binding = 0) uniform sampler linearSampler;
 layout(set = 4, binding = 1) uniform sampler nearestSampler;
@@ -69,9 +63,8 @@ layout(set = 6, binding = 0) uniform texture2D textures[1024];
 
 struct hitPayload
 {
-  bool miss;
+    uint depth;
   vec3 radiance;
-  uint depth;
 };
 
 layout(location = 1) rayPayloadEXT hitPayload payload;
@@ -276,8 +269,6 @@ void main()
 
   for(uint i = 0; i < globalDrawData.maxSpecularSampleCount; i++)
 	{
-    uint index = (i + globalDrawData.frameNumber) % globalDrawData.sampleSequenceLength;
-
     vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(i)) / imageDimesions);
 
     float pdfValue = ggxImportanceCDF(noise.x, roughness * roughness);

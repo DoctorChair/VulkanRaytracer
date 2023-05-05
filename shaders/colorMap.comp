@@ -3,16 +3,13 @@
 layout (local_size_x = 16, local_size_y = 16) in;
 
 layout(set = 0, binding = 0) uniform RenderBuffer{
-	float fog;
 	uint sunLightCount;
 	uint pointLightCount;
-	uint spotLightCount;
   	uint maxRecoursionDepth;
   	uint maxDiffuseSampleCount;
   	uint maxSpecularSampleCount;
   	uint maxShadowRaySampleCount;
   	uint noiseSampleTextureIndex;
-	uint sampleSequenceLength;
 	uint frameNumber;
 	uint historyLength;
 	uint historyIndex;
@@ -52,10 +49,10 @@ void main()
 {
 
     const float gamma = 2.2;
-    const float exposure = 1.5;
+    const float exposure = 1.0;
 
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-	vec2 uv = vec2(coord) / vec2(globalDrawData.nativeResolutionWidth*2, globalDrawData.nativeResolutionHeight*2);
+	vec2 uv = vec2(coord) / vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight);
 
     vec3 hdrColor = loadInterpolateBilinear2D(uv,  vec2(globalDrawData.nativeResolutionWidth, globalDrawData.nativeResolutionHeight)).xyz;
     
