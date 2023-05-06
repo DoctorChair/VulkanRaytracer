@@ -25,7 +25,7 @@
 #include <unordered_set>
 
 #include <iostream>
-
+#include <functional>
 
 using namespace std;
 #define VK_CHECK(x)                                                 \
@@ -240,8 +240,17 @@ struct PipelineMeasurements
 	std::vector<uint64_t> _postProcessPassIntervals;
 	std::vector<uint64_t> _guiPassIntervals;
 	std::vector<uint64_t> _timesScale;
+	std::vector<uint64_t> _avgFrameTime;
+	float _avgFrameValue = 0;
 };
  
+struct Scene
+{
+	std::vector<MeshInstance>* meshInstances = nullptr;
+	std::vector<PointLight> pointLights;
+	std::vector<SunLight> directionalLights;
+};
+
 class Raytracer
 {
 public:
@@ -268,8 +277,10 @@ public:
 	void drawSpotLight(SpotLight light);
 	void setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position);
 	void drawDebugGui(SDL_Window* window);
+	void hideGui();
 	void handleGuiEvents(SDL_Event* event);
 	void update();
+	void registerLoadSceneCallback(std::function<std::vector<MeshInstance>* (const std::string& path, Raytracer& raytracer)> callback);
 
 	void destroy();
 
@@ -323,7 +334,12 @@ private:
 	void executePostProcessPass();
 	void executeGuiPass();
 
+	void loadScene(const std::string& path);
+	void drawScene();
+
 	void getTimestamps();
+	void writeToCSV(std::string path);
+	
 
 private:
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR _raytracingProperties;
@@ -495,4 +511,8 @@ private:
 	std::vector<VkDescriptorSet> _postProcessInputOutputDescriptorSets;
 
 	Mesh _dummyMesh;
+
+	Scene _scene;
+
+	std::function<std::vector<MeshInstance>* (const std::string& path, Raytracer& raytracer)> _loadSceneCallback;
 };

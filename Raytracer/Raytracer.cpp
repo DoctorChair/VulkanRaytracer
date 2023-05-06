@@ -9,6 +9,11 @@
 #include "imgui_impl_vulkan.h"
 #include "implot.h"
 
+#include <iostream>
+#include <fstream> 
+
+
+
 void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHeight)
 {
 	VkPhysicalDeviceVulkan13Features features11 = {};
@@ -241,6 +246,7 @@ void Raytracer::initQueryPool()
 	_measurments._postProcessPassIntervals.resize(_frameMeasurementPeriod);
 	_measurments._guiPassIntervals.resize(_frameMeasurementPeriod);
 	_measurments._timesScale.resize(_frameMeasurementPeriod);
+	_measurments._avgFrameTime.reserve(_frameMeasurementPeriod);
 	for(unsigned int i = 0; i < _frameMeasurementPeriod; i++)
 	{
 		_measurments._timesScale[i] = i;
@@ -565,17 +571,18 @@ void Raytracer::drawSunLight(SunLight light)
 
 void Raytracer::drawPointLight(PointLightSourceInstance light)
 {
-	PointLight p;
-	p.position = light.position;
-	p.radius = light.radius;
-	p.emissionIndex = light.lightModel.material.emissionIndex;
-	p.strength = light.strength;
+		PointLight p;
+		p.position = light.position;
+		p.radius = light.radius;
+		p.emissionIndex = light.lightModel.material.emissionIndex;
+		p.strength = light.strength;
 
-	glm::mat4 transform = glm::translate(glm::mat4(1.0f), light.position) * glm::scale(glm::mat4(1.0f), glm::vec3(light.radius * 2.0f));
+		glm::mat4 transform = glm::translate(glm::mat4(1.0f), light.position) * glm::scale(glm::mat4(1.0f), glm::vec3(light.radius * 2.0f));
 
-	light.lightModel.transform = transform;
-	_pointLightTransferCache.push_back(p);
-	drawMeshInstance(light.lightModel, 0x10);
+		light.lightModel.transform = transform;
+		light.lightModel.previousTransform = transform;
+		_pointLightTransferCache.push_back(p);
+		drawMeshInstance(light.lightModel, 0x10);
 }
 
 void Raytracer::setNoiseTextureIndex(uint32_t index)
@@ -597,7 +604,8 @@ void Raytracer::setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm:
 
 void Raytracer::update()
 {
-	
+	drawScene();
+
 	_currentSwapchainIndex = _vulkan.aquireNextImageIndex(VK_NULL_HANDLE, _frameSynchroStructs[_currentFrameIndex]._presentSemaphore);
 
 	executeDefferedPass();
@@ -1524,6 +1532,79 @@ void Raytracer::getTimestamps()
 	_measurments._raytracePassIntervals[_frameNumber % _frameMeasurementPeriod] = static_cast<uint64_t>(static_cast<float>(queueData[3] - queueData[2]) * _measurments.timestampPeriod);
 	_measurments._postProcessPassIntervals[_frameNumber % _frameMeasurementPeriod] = static_cast<uint64_t>(static_cast<float>(queueData[5] - queueData[4]) * _measurments.timestampPeriod);
 	_measurments._guiPassIntervals[_frameNumber % _frameMeasurementPeriod] = static_cast<uint64_t>(static_cast<float>(queueData[7] - queueData[6]) * _measurments.timestampPeriod);
+
+	if (_frameNumber % 60 != 0)
+	{
+		_measurments._avgFrameValue = _measurments._avgFrameValue + (queueData[7] - queueData[1]);
+	}
+	else
+	{
+		if (_measurments._avgFrameTime.size() == _frameMeasurementPeriod)
+			_measurments._avgFrameTime.clear();
+
+		_measurments._avgFrameTime.push_back(static_cast<uint64_t>(static_cast<float>(_measurments._avgFrameValue) 
+			/ static_cast<float>(60)));
+		_measurments._avgFrameValue = 0;
+	}
+}
+
+void Raytracer::writeToCSV(std::string path)
+{
+	ofstream gBufferfile(path + "\\GBufferPassIntervals.csv");
+	for(unsigned int i = 0; i<_measurments._gBufferPassIntervals.size(); i++)
+	{
+		gBufferfile << _measurments._gBufferPassIntervals[i];
+		gBufferfile << ",";
+	}
+	ofstream Raytracefile(path + "\\RaytracePassIntervals.csv");
+	for (unsigned int i = 0; i < _measurments._raytracePassIntervals.size(); i++)
+	{
+		Raytracefile << _measurments._raytracePassIntervals[i];
+		Raytracefile << ",";
+	}
+	ofstream PostProcessFile(path + "\\PostProcessPassIntervals.csv");
+	for (unsigned int i = 0; i < _measurments._postProcessPassIntervals.size(); i++)
+	{
+		PostProcessFile << _measurments._postProcessPassIntervals[i];
+		PostProcessFile << ",";
+	}
+	ofstream guiFile(path + "\\GuiPassIntervals.csv");
+	for (unsigned int i = 0; i < _measurments._guiPassIntervals.size(); i++)
+	{
+		guiFile << _measurments._guiPassIntervals[i];
+		guiFile << ",";
+	}
+	gBufferfile.close();
+	Raytracefile.close();
+	PostProcessFile.close();
+	guiFile.close();
+}
+
+void Raytracer::drawScene()
+{
+	if (_scene.meshInstances != nullptr)
+	{
+		
+		for (unsigned int i = 0; i < _scene.meshInstances->size(); i++)
+		{
+			_scene.meshInstances->at(i).previousTransform = _scene.meshInstances->at(i).transform;
+			drawMeshInstance(_scene.meshInstances->at(i), 0x01);
+		}
+	}
+}
+
+void Raytracer::loadScene(const std::string& path)
+{
+	vkDeviceWaitIdle(_vulkan._device);
+
+	std::vector<MeshInstance>* meshInstances = _loadSceneCallback(path, *this);
+
+	_scene.meshInstances = meshInstances;
+}
+
+void Raytracer::registerLoadSceneCallback(std::function<std::vector<MeshInstance>* (const std::string& path, Raytracer& raytracer)> callback)
+{
+	_loadSceneCallback = callback;
 }
 
 void Raytracer::drawDebugGui(SDL_Window* window)
@@ -1536,7 +1617,7 @@ void Raytracer::drawDebugGui(SDL_Window* window)
 	int lightSampels = _shadowSampleCount;
 	int diffuseSamples = _diffuseSampleCount;
 	int specularSamples = _specularSampleCount;
-
+	std::string targetPath;
 	ImGui::NewFrame();
 	
 		ImGui::Begin("Debug window", &_guiActive, ImGuiWindowFlags_MenuBar);
@@ -1546,13 +1627,27 @@ void Raytracer::drawDebugGui(SDL_Window* window)
 			ImGui::DragInt("Diffuse samples", &diffuseSamples, 1.0f, 0, 8);
 			ImGui::DragInt("Specular samples", &specularSamples, 1.0f, 0, 8);
 			ImGui::Text("Press CTRL to lock Camera!");
-			ImGui::Button("Write timestamps to CSV file");
-			ImPlot::BeginPlot("Frame Times");
+			if (ImGui::Button("Write timestamps to CSV file")) 
+			{
+				writeToCSV(std::string("C:\\Users\\Eric\\Desktop"));
+			};
+			if (ImGui::Button("Load Scene"))
+			{
+				loadScene("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
+			}
+			/*ImPlot::BeginPlot("Frame Times");
+			ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 40000000);
+			ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, 1000.0, 2);
 			ImPlot::PlotLine<uint64_t>("G-Buffer-Pass time", _measurments._timesScale.data(), _measurments._gBufferPassIntervals.data(), _frameMeasurementPeriod);
 			ImPlot::PlotLine<uint64_t>("Raytrace-Pass time", _measurments._timesScale.data(), _measurments._raytracePassIntervals.data(), _frameMeasurementPeriod);
 			ImPlot::PlotLine<uint64_t>("Post-Process-Pass time", _measurments._timesScale.data(), _measurments._postProcessPassIntervals.data(), _frameMeasurementPeriod);
 			ImPlot::PlotLine<uint64_t>("Gui-Pass time", _measurments._timesScale.data(), _measurments._guiPassIntervals.data(), _frameMeasurementPeriod);
 			ImPlot::EndPlot();
+			ImPlot::BeginPlot("Complete AVG Frame Time");
+			ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 40000000);
+			ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, 1000.0, 2);
+			ImPlot::PlotLine<uint64_t>("AVG round trip time", _measurments._timesScale.data(), _measurments._avgFrameTime.data(), _measurments._avgFrameTime.size());
+			ImPlot::EndPlot();*/
 		}
 	
 	ImGui::End();
@@ -1642,6 +1737,11 @@ void Raytracer::initBufferState()
 	vkDeviceWaitIdle(_vulkan._device);
 
 	_transferCommandBufferAllocator.reset(_vulkan._device);
+}
+
+void Raytracer::hideGui()
+{
+	drawGUI = !drawGUI;
 }
 
 void Raytracer::initPostProcessBuffers()

@@ -194,7 +194,7 @@ void main()
   
   outColor.xyz = outColor.xyz + specularRadiance; 
   outColor.xyz = outColor.xyz + diffuseRadiance;
-  outColor.xyz = primaryEmission.xyz * (float(length(primaryEmission) > 0)) + outColor.xyz * (float(length(primaryEmission) == 0.0));
+  outColor.xyz = vec3(0.0) * (float(length(primaryEmission.xyz) > 0)) + outColor.xyz * (float(length(primaryEmission.xyz) == 0.0));
   
   outColor.w = depth;
   

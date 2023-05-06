@@ -6,6 +6,52 @@
 
 #include "CameraController.h"
 
+std::vector<MeshInstance>* loadSceneCallback(const std::string& path, Raytracer& raytracer)
+{
+	ModelLoader loader;
+
+	ModelData scene = loader.loadModel(path);
+
+	int i = 0;
+
+	std::vector<Mesh> testScene;
+
+	std::vector<MeshInstance>* instances = new std::vector<MeshInstance>;
+	for (auto& m : scene.meshes)
+	{
+		testScene.push_back(raytracer.loadMesh(m.vertices, m.indices, m.name));
+
+		if (!m.material.albedo.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.albedo);
+			testScene.back().material.albedoIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.albedo);
+		}
+		if (!m.material.normal.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.normal);
+			testScene.back().material.normalIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.normal);
+		}
+		if (!m.material.metallic.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.metallic);
+			testScene.back().material.metallicIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.metallic);
+		}
+		if (!m.material.roughness.empty())
+		{
+			TextureData* data = loader.getTextureData(m.material.roughness);
+			testScene.back().material.roughnessIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, m.material.roughness);
+		}
+
+		instances->push_back(raytracer.getMeshInstance(m.name));
+		instances->back().material = testScene.back().material;
+		instances->back().transform = m.transform;
+	}
+
+	loader.freeAssets();
+
+	return instances;
+}
+
 int main(int argc, char* argv[])
 {
 	SDL_Init(SDL_INIT_VIDEO);
@@ -15,6 +61,9 @@ int main(int argc, char* argv[])
 
 	Raytracer raytracer;
 	raytracer.init(window, 1920, 1080);
+	std::function<std::vector<MeshInstance>* (const std::string& path, Raytracer& raytracer)> callback = loadSceneCallback;
+
+	raytracer.registerLoadSceneCallback(callback);
 
 	TextureLoader textureLoader;
 	TextureData noiseTexture = textureLoader.loadTexture("C:\\Users\\Eric\\projects\\textures\\FreeBlueNoiseTextures\\Data\\1024_1024\\LDR_RGBA_0.png");
@@ -33,13 +82,13 @@ int main(int argc, char* argv[])
 
 	//ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\TestScene\\TestScene.gltf");
 
-	ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
+	/*ModelData scene = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");*/
 
 	ModelData pointSource = loader.loadModel("C:\\Users\\Eric\\projects\\scenes\\LightSources\\\LightSource.gltf");
 
 	int i = 0;
 
-	std::vector<Mesh> testScene;
+	/*std::vector<Mesh> testScene;
 
 	std::vector<MeshInstance> instances;
 	for(auto& m : scene.meshes)
@@ -70,7 +119,7 @@ int main(int argc, char* argv[])
 		instances.push_back(raytracer.getMeshInstance(m.name));
 		instances.back().material = testScene.back().material;
 		instances.back().transform = m.transform;
-	}
+	}*/
 
 	MeshInstance pointLightInstance;
 	raytracer.loadMesh(pointSource.meshes[0].vertices, pointSource.meshes[0].indices, pointSource.meshes[0].name);
@@ -124,6 +173,7 @@ int main(int argc, char* argv[])
 	camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
 
 	bool cameraActive = true;
+	bool guiActive = true;
 
 	while (!quit)
 	{
@@ -168,7 +218,13 @@ int main(int argc, char* argv[])
 					deltaRight = -1.0f;
 					break;
 				case SDLK_LCTRL:
-					cameraActive = true;
+					cameraActive = !cameraActive;
+					break;
+				case SDLK_LALT:
+					{
+					guiActive = !guiActive;
+					raytracer.hideGui();
+					}
 					break;
 				}
 			}
@@ -188,9 +244,6 @@ int main(int argc, char* argv[])
 				case SDLK_a:
 					deltaRight = 0.0f;
 					break;
-				case SDLK_LCTRL:
-					cameraActive = false;
-					break;
 				}
 			}
 			if (e.type == SDL_WINDOWEVENT)
@@ -208,17 +261,20 @@ int main(int argc, char* argv[])
 			raytracer.setCamera(camera._viewMatrix, camera._projectionMatrix, camera._position);
 		}
 
-		uint32_t id = 0;
+		/*uint32_t id = 0;
 		for(unsigned int i = 0; i<testScene.size(); i++)
 		{
 			instances[i].previousTransform = instances[i].transform;
 			raytracer.drawMeshInstance(instances[i], 0x01);
 			id++;
-		}
+		}*/
 		
 		raytracer.drawPointLight(p);
-
-		raytracer.drawDebugGui(window);
+		
+		if(guiActive)
+		{ 
+			raytracer.drawDebugGui(window);
+		}
 
 		raytracer.update();
 	}

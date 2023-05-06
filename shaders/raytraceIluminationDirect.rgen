@@ -208,7 +208,7 @@ void main()
   }
 
   outColor.xyz = radiance;
-  outColor.xyz = primaryEmission.xyz * (float(length(primaryEmission) > 0)) + outColor.xyz * (float(length(primaryEmission) == 0.0));
+  outColor.xyz = primaryEmission.xyz * (float(length(primaryEmission.xyz) > 0)) + outColor.xyz * (float(length(primaryEmission.xyz) == 0.0));
   
   outColor.w = depth;
   }
