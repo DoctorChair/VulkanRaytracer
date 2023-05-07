@@ -135,6 +135,8 @@ struct DrawData
 	uint32_t ID;
 	uint32_t vertexOffset;
 	uint32_t indicesOffset;
+	float emissionIntensity = 0.0;
+	float padding[3];
 };
 
 struct Model
@@ -240,8 +242,6 @@ struct PipelineMeasurements
 	std::vector<uint64_t> _postProcessPassIntervals;
 	std::vector<uint64_t> _guiPassIntervals;
 	std::vector<uint64_t> _timesScale;
-	std::vector<uint64_t> _avgFrameTime;
-	float _avgFrameValue = 0;
 };
  
 struct Scene
@@ -268,6 +268,7 @@ public:
 
 	//update tlas and place draw call;
 	void drawMeshInstance(MeshInstance instance, uint32_t cullMask);
+	void drawLightMeshInstance(MeshInstance meshInstance, uint32_t cullMask, float intenisty);
 	void setNoiseTextureIndex(uint32_t index);
 	void setEnvironmentTextureIndex(uint32_t index);
 
@@ -338,7 +339,7 @@ private:
 	void drawScene();
 
 	void getTimestamps();
-	void writeToCSV(std::string path);
+	void writeToCSV(std::string path, unsigned int length, unsigned int start);
 	
 
 private:
@@ -352,7 +353,8 @@ private:
 	uint32_t nativeRenderingReselutionY;
 
 	uint32_t _concurrencyCount = 2;
-	uint32_t _frameMeasurementPeriod = 1000;
+	uint32_t _frameMeasurementPeriod = 10000;
+	uint32_t  _timestampCaptureLength = 0;
 	uint32_t _maxDrawCount = 100000;
 	uint32_t _maxTextureCount = 1024;
 	uint32_t _maxTriangleCount = 12000000;
@@ -368,7 +370,8 @@ private:
 	uint32_t _diffuseSampleCount = 1;
 	uint32_t _specularSampleCount = 1;
 	uint32_t _shadowSampleCount = 1;
-	uint32_t _historyLength = 24;
+	uint32_t _historyLength = 32;
+	uint32_t _currentBackProjectionLength = 1;
 
 	uint32_t nativeWidth = 1920;
 	uint32_t nativeHeight = 1080;
@@ -379,6 +382,9 @@ private:
 	bool drawGUI = true;
 
 	PipelineMeasurements _measurments;
+	bool _captureActive = false;
+	unsigned int _captureIndex = 0;
+	unsigned int _capturePeriodLength = 1;
 
 	std::vector<VGM::Texture> _textures;
 	std::vector<VkImageView> _views;

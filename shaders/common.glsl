@@ -41,7 +41,8 @@ struct drawInstanceData
 	uint ID;
 	uint vertexOffset;
 	uint indicesOffset;
-};
+	float emissinIntensity;
+	};
 
 struct Vertex
 {

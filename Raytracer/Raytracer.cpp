@@ -60,17 +60,31 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 	int w = 0, h = 0;
 	SDL_GetWindowSize(window, &w, &h);
 
-	_vulkan = VGM::VulkanContext(window, windowWidth, windowHeight, 
-		1, 3, 0,
-		{},
-		{ "VK_LAYER_KHRONOS_validation" },
-		{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 
-		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 
-		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, "VK_EXT_depth_range_unrestricted"},
-		&features2, 3);
+	std::vector<const char*> validationLayers = {};
+	
+#ifdef _DEBUG
+	validationLayers = { "VK_LAYER_KHRONOS_validation" };
+#endif // DEBUG
+#ifdef NDEBUG
+	std::cout << "ValidationLayers inactive!\n";
+#endif // NDEBUG
 
+	try {
+		_vulkan = VGM::VulkanContext(window, windowWidth, windowHeight,
+			1, 3, 0,
+			{},
+			validationLayers,
+			{ VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+			VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+			VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+			VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+			VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME},
+			&features2, 3);
+	}
+	catch(const std::runtime_error err)
+	{
+		std::cout << err.what() << std::endl;
+	}
 	_windowWidth = w;
 	_windowHeight = h;
 
@@ -80,31 +94,54 @@ void Raytracer::init(SDL_Window* window, uint32_t windowWidth, uint32_t windowHe
 	_raytracingProperties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
 	properties.pNext = &_raytracingProperties;
 	vkGetPhysicalDeviceProperties2(_vulkan._physicalDevice, &properties);
-	
+
 	
 	initDescriptorSetAllocator();
+
 	initDescriptorSetLayouts();
+	
 	initDescripotrSets();
+	
 	initGBufferShader();
+	
 	initRaytraceShader();
+
 	initPostProcessingChain();
+
 	initShaderBindingTable();
+
 	initSyncStructures();
+
 	initCommandBuffers();
+
 	initDataBuffers();
+
 	initLightBuffers();
+
 	initHistoryBuffers();
+
 	initBufferState();
+
 	initgBuffers();
+
 	initRaytracingBackBuffers();
+
 	initPostProcessBuffers();
+
 	initMeshBuffer();
+
 	initTextureArrays();
-	loadPlaceholderMeshAndTexture();	
+
+	loadPlaceholderMeshAndTexture();
+
 	initSamplers();
+	
 	updateDescriptorSets();
+	
 	initGui(window, w, h);
+	
 	initQueryPool();
+	
 }
 
 void Raytracer::initGui(SDL_Window* window, int width, int height)
@@ -246,7 +283,6 @@ void Raytracer::initQueryPool()
 	_measurments._postProcessPassIntervals.resize(_frameMeasurementPeriod);
 	_measurments._guiPassIntervals.resize(_frameMeasurementPeriod);
 	_measurments._timesScale.resize(_frameMeasurementPeriod);
-	_measurments._avgFrameTime.reserve(_frameMeasurementPeriod);
 	for(unsigned int i = 0; i < _frameMeasurementPeriod; i++)
 	{
 		_measurments._timesScale[i] = i;
@@ -522,7 +558,7 @@ void Raytracer::drawMeshInstance(MeshInstance meshInstance, uint32_t cullMask)
 	command.firstInstance = static_cast<uint32_t>(_drawCommandTransferCache.size());
 	
 	_drawCommandTransferCache.push_back(command);
-	_drawDataTransferCache.push_back({ meshInstance.transform, meshInstance.previousTransform, material , meshInstance.instanceID, mesh.vertexOffset, mesh.indexOffset});
+	_drawDataTransferCache.push_back({ meshInstance.transform, meshInstance.previousTransform, material , meshInstance.instanceID, mesh.vertexOffset, mesh.indexOffset, 0.0f});
 
 	glm::mat4 transform = glm::transpose(meshInstance.transform);
 
@@ -548,6 +584,49 @@ void Raytracer::drawMeshInstance(MeshInstance meshInstance, uint32_t cullMask)
 	instace.mask = cullMask;
 	instace.instanceShaderBindingTableRecordOffset = 0;
 	
+	_accelerationStructure._instanceTransferCache.push_back(instace);
+}
+
+void Raytracer::drawLightMeshInstance(MeshInstance meshInstance, uint32_t cullMask, float intenisty)
+{
+	Mesh mesh = _meshes[meshInstance.meshIndex];
+	Material material = meshInstance.material;
+	BLAS* blas = &_accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex];
+
+	VkDrawIndexedIndirectCommand command;
+	command.vertexOffset = mesh.vertexOffset;
+	command.instanceCount = 1;
+	command.indexCount = mesh.indicesCount;
+	command.firstIndex = mesh.indexOffset;
+	command.firstInstance = static_cast<uint32_t>(_drawCommandTransferCache.size());
+
+	_drawCommandTransferCache.push_back(command);
+	_drawDataTransferCache.push_back({ meshInstance.transform, meshInstance.previousTransform, material , meshInstance.instanceID, mesh.vertexOffset, mesh.indexOffset, intenisty });
+
+	glm::mat4 transform = glm::transpose(meshInstance.transform);
+
+	VkAccelerationStructureInstanceKHR instace = {};
+	instace.transform.matrix[0][0] = transform[0][0];
+	instace.transform.matrix[0][1] = transform[0][1];
+	instace.transform.matrix[0][2] = transform[0][2];
+	instace.transform.matrix[0][3] = transform[0][3];
+
+	instace.transform.matrix[1][0] = transform[1][0];
+	instace.transform.matrix[1][1] = transform[1][1];
+	instace.transform.matrix[1][2] = transform[1][2];
+	instace.transform.matrix[1][3] = transform[1][3];
+
+	instace.transform.matrix[2][0] = transform[2][0];
+	instace.transform.matrix[2][1] = transform[2][1];
+	instace.transform.matrix[2][2] = transform[1][1];
+	instace.transform.matrix[2][3] = transform[2][3];
+
+	instace.accelerationStructureReference = _accelerationStructure.bottomLevelAccelStructures[meshInstance.blasIndex].getAddress(_vulkan._device);
+	instace.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+	instace.instanceCustomIndex = command.firstInstance;
+	instace.mask = cullMask;
+	instace.instanceShaderBindingTableRecordOffset = 0;
+
 	_accelerationStructure._instanceTransferCache.push_back(instace);
 }
 
@@ -582,7 +661,7 @@ void Raytracer::drawPointLight(PointLightSourceInstance light)
 		light.lightModel.transform = transform;
 		light.lightModel.previousTransform = transform;
 		_pointLightTransferCache.push_back(p);
-		drawMeshInstance(light.lightModel, 0x10);
+		drawLightMeshInstance(light.lightModel, 0x10, light.strength);
 }
 
 void Raytracer::setNoiseTextureIndex(uint32_t index)
@@ -626,7 +705,7 @@ void Raytracer::update()
 
 	_currentFrameIndex = (_currentFrameIndex + 1) % _concurrencyCount;
 
-	_historyBuffer.currentIndex = (_historyBuffer.currentIndex + 1) % _historyLength;
+	_historyBuffer.currentIndex = (_historyBuffer.currentIndex + 1) % _currentBackProjectionLength;
 
 	_frameNumber++;
 }	
@@ -961,7 +1040,7 @@ void Raytracer::executeDefferedPass()
 	_globalRenderData.maxSpecularSampleCount = _specularSampleCount;
 	_globalRenderData.maxShadowRaySampleCount = _shadowSampleCount;
 	_globalRenderData.frameNumber = _frameNumber;
-	_globalRenderData.historyLength = _historyLength;
+	_globalRenderData.historyLength = _currentBackProjectionLength;
 	_globalRenderData.historyIndex = _historyBuffer.currentIndex;
 	_globalRenderData.nativeResolutionWidth = nativeWidth;
 	_globalRenderData.nativeResolutionHeight = nativeHeight;
@@ -1528,48 +1607,46 @@ void Raytracer::getTimestamps()
 	vkGetQueryPoolResults(_vulkan._device, _measurments.frameQuerryPools[index], 0, 8, sizeof(uint64_t) * 8
 		, &queueData[0], sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 
-	_measurments._gBufferPassIntervals[_frameNumber % _frameMeasurementPeriod] = static_cast<uint64_t>(static_cast<float>(queueData[1] - queueData[0]) * _measurments.timestampPeriod);
-	_measurments._raytracePassIntervals[_frameNumber % _frameMeasurementPeriod] = static_cast<uint64_t>(static_cast<float>(queueData[3] - queueData[2]) * _measurments.timestampPeriod);
-	_measurments._postProcessPassIntervals[_frameNumber % _frameMeasurementPeriod] = static_cast<uint64_t>(static_cast<float>(queueData[5] - queueData[4]) * _measurments.timestampPeriod);
-	_measurments._guiPassIntervals[_frameNumber % _frameMeasurementPeriod] = static_cast<uint64_t>(static_cast<float>(queueData[7] - queueData[6]) * _measurments.timestampPeriod);
-
-	if (_frameNumber % 60 != 0)
+	if (_captureActive)
 	{
-		_measurments._avgFrameValue = _measurments._avgFrameValue + (queueData[7] - queueData[1]);
-	}
-	else
-	{
-		if (_measurments._avgFrameTime.size() == _frameMeasurementPeriod)
-			_measurments._avgFrameTime.clear();
-
-		_measurments._avgFrameTime.push_back(static_cast<uint64_t>(static_cast<float>(_measurments._avgFrameValue) 
-			/ static_cast<float>(60)));
-		_measurments._avgFrameValue = 0;
+		if (_captureIndex < _capturePeriodLength)
+		{
+			_measurments._gBufferPassIntervals[_captureIndex] = static_cast<uint64_t>(static_cast<float>(queueData[1] - queueData[0]) * _measurments.timestampPeriod);
+			_measurments._raytracePassIntervals[_captureIndex] = static_cast<uint64_t>(static_cast<float>(queueData[3] - queueData[2]) * _measurments.timestampPeriod);
+			_measurments._postProcessPassIntervals[_captureIndex] = static_cast<uint64_t>(static_cast<float>(queueData[5] - queueData[4]) * _measurments.timestampPeriod);
+			_measurments._guiPassIntervals[_captureIndex] = static_cast<uint64_t>(static_cast<float>(queueData[7] - queueData[6]) * _measurments.timestampPeriod);
+			_captureIndex++;
+		}
+		else
+		{
+			_captureActive = false;
+			_captureIndex = 0;
+		}
 	}
 }
 
-void Raytracer::writeToCSV(std::string path)
+void Raytracer::writeToCSV(std::string path, unsigned int length, unsigned int start)
 {
 	ofstream gBufferfile(path + "\\GBufferPassIntervals.csv");
-	for(unsigned int i = 0; i<_measurments._gBufferPassIntervals.size(); i++)
+	for(unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		gBufferfile << _measurments._gBufferPassIntervals[i];
 		gBufferfile << ",";
 	}
 	ofstream Raytracefile(path + "\\RaytracePassIntervals.csv");
-	for (unsigned int i = 0; i < _measurments._raytracePassIntervals.size(); i++)
+	for (unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		Raytracefile << _measurments._raytracePassIntervals[i];
 		Raytracefile << ",";
 	}
 	ofstream PostProcessFile(path + "\\PostProcessPassIntervals.csv");
-	for (unsigned int i = 0; i < _measurments._postProcessPassIntervals.size(); i++)
+	for (unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		PostProcessFile << _measurments._postProcessPassIntervals[i];
 		PostProcessFile << ",";
 	}
 	ofstream guiFile(path + "\\GuiPassIntervals.csv");
-	for (unsigned int i = 0; i < _measurments._guiPassIntervals.size(); i++)
+	for (unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		guiFile << _measurments._guiPassIntervals[i];
 		guiFile << ",";
@@ -1617,44 +1694,60 @@ void Raytracer::drawDebugGui(SDL_Window* window)
 	int lightSampels = _shadowSampleCount;
 	int diffuseSamples = _diffuseSampleCount;
 	int specularSamples = _specularSampleCount;
+	int captureSeriesLength = _capturePeriodLength;
+	int backProjectionLength = _currentBackProjectionLength;
 	std::string targetPath;
 	ImGui::NewFrame();
 	
-		ImGui::Begin("Debug window", &_guiActive, ImGuiWindowFlags_MenuBar);
+ 		ImGui::Begin("Debug window", &_guiActive, ImGuiWindowFlags_MenuBar);
 		if (_guiActive)
 		{
-			ImGui::DragInt("Light samples", &lightSampels, 1.0f, 1, 8);
-			ImGui::DragInt("Diffuse samples", &diffuseSamples, 1.0f, 0, 8);
-			ImGui::DragInt("Specular samples", &specularSamples, 1.0f, 0, 8);
+			ImGui::DragInt("Num Light samples", &lightSampels, 1.0f, 1, 128);
+			ImGui::DragInt("Num Diffuse samples", &diffuseSamples, 1.0f, 0, 128);
+			ImGui::DragInt("Num Specular samples", &specularSamples, 1.0f, 0, 128);
+			ImGui::DragInt("Num Back projection steps", &backProjectionLength, 1.0f, 1, _historyLength);
 			ImGui::Text("Press CTRL to lock Camera!");
-			if (ImGui::Button("Write timestamps to CSV file")) 
+			ImGui::Text("Press ALT to hide GUI!");
+			ImGui::DragInt("Capture length", &captureSeriesLength, 1.0f, 1, 1000);
+			if(ImGui::Button("Capture Next 1000 frames"))
 			{
-				writeToCSV(std::string("C:\\Users\\Eric\\Desktop"));
-			};
+				_captureActive = true;
+			}
+			if(_captureActive == false)
+			{ 
+				if (ImGui::Button("Write timestamps to CSV file")) 
+				{
+					writeToCSV(std::string("C:\\Users\\Eric\\Desktop"), 1000, 0);
+				};
+			}
+			else
+			{
+				ImGui::Text("Capture Active!");
+			}
 			if (ImGui::Button("Load Scene"))
 			{
-				loadScene("C:\\Users\\Eric\\projects\\scenes\\CornellBox\\CornellBox.gltf");
+				loadScene("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
 			}
-			/*ImPlot::BeginPlot("Frame Times");
-			ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 40000000);
-			ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, 1000.0, 2);
-			ImPlot::PlotLine<uint64_t>("G-Buffer-Pass time", _measurments._timesScale.data(), _measurments._gBufferPassIntervals.data(), _frameMeasurementPeriod);
-			ImPlot::PlotLine<uint64_t>("Raytrace-Pass time", _measurments._timesScale.data(), _measurments._raytracePassIntervals.data(), _frameMeasurementPeriod);
-			ImPlot::PlotLine<uint64_t>("Post-Process-Pass time", _measurments._timesScale.data(), _measurments._postProcessPassIntervals.data(), _frameMeasurementPeriod);
-			ImPlot::PlotLine<uint64_t>("Gui-Pass time", _measurments._timesScale.data(), _measurments._guiPassIntervals.data(), _frameMeasurementPeriod);
-			ImPlot::EndPlot();
-			ImPlot::BeginPlot("Complete AVG Frame Time");
-			ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 40000000);
-			ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, 1000.0, 2);
-			ImPlot::PlotLine<uint64_t>("AVG round trip time", _measurments._timesScale.data(), _measurments._avgFrameTime.data(), _measurments._avgFrameTime.size());
-			ImPlot::EndPlot();*/
+			if(_captureActive)
+			{ 
+				ImPlot::BeginPlot("Frame Times");
+				ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 40000000);
+				ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, 1000.0, 2);
+				ImPlot::PlotLine<uint64_t>("G-Buffer-Pass time", _measurments._timesScale.data(), _measurments._gBufferPassIntervals.data(), _frameMeasurementPeriod);
+				ImPlot::PlotLine<uint64_t>("Raytrace-Pass time", _measurments._timesScale.data(), _measurments._raytracePassIntervals.data(), _frameMeasurementPeriod);
+				ImPlot::PlotLine<uint64_t>("Post-Process-Pass time", _measurments._timesScale.data(), _measurments._postProcessPassIntervals.data(), _frameMeasurementPeriod);
+				ImPlot::PlotLine<uint64_t>("Gui-Pass time", _measurments._timesScale.data(), _measurments._guiPassIntervals.data(), _frameMeasurementPeriod);
+				ImPlot::EndPlot();
+			}
 		}
-	
+		
 	ImGui::End();
 	
 	_shadowSampleCount = lightSampels;
 	_diffuseSampleCount = diffuseSamples;
 	_specularSampleCount = specularSamples;
+	_capturePeriodLength = captureSeriesLength;
+	_currentBackProjectionLength = backProjectionLength;
 	}
 }
 
@@ -2120,7 +2213,6 @@ void Raytracer::initSyncStructures()
 	_frameSynchroStructs.resize(_concurrencyCount);
 	for (unsigned int i = 0; i < _concurrencyCount; i++)
 	{
-
 		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._frameFence);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._defferedRenderSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._postProcessSemaphore);
@@ -2149,8 +2241,6 @@ void Raytracer::initDataBuffers()
 		_accelerationStructure.instanceBuffers[i] = VGM::Buffer(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
 			| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, sizeof(VkAccelerationStructureInstanceKHR) * _maxDrawCount, _vulkan._generalPurposeAllocator, _vulkan._device);
 	}
-
-	
 }
 
 void Raytracer::initLightBuffers()

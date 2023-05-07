@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
 	uint32_t environmentTextureIndex = raytracer.loadTexture(environmentTexture.pixels, environmentTexture.width, environmentTexture.height, environmentTexture.nrChannels, "environmentMapTexture");
 
 	raytracer.setNoiseTextureIndex(noiseTexureIndex);
-	raytracer.setEnvironmentTextureIndex(environmentTextureIndex);
+	raytracer.setEnvironmentTextureIndex(0);
 
 	ModelLoader loader;
 	
@@ -149,7 +149,7 @@ int main(int argc, char* argv[])
 
 	PointLightSourceInstance p;
 	p.position = glm::vec3(0.0f, 4.0f, 0.0f);
-	p.radius = 0.5f;
+	p.radius = 0.3f;
 	p.strength = 50.0f;
 	p.lightModel = pointLightInstance;
 
@@ -174,6 +174,8 @@ int main(int argc, char* argv[])
 
 	bool cameraActive = true;
 	bool guiActive = true;
+
+	
 
 	while (!quit)
 	{
@@ -260,7 +262,7 @@ int main(int argc, char* argv[])
 			camera.update(deltaTime, deltaYaw, deltaPitch, deltaRight, deltaFront);
 			raytracer.setCamera(camera._viewMatrix, camera._projectionMatrix, camera._position);
 		}
-
+		
 		/*uint32_t id = 0;
 		for(unsigned int i = 0; i<testScene.size(); i++)
 		{
@@ -273,9 +275,11 @@ int main(int argc, char* argv[])
 		
 		if(guiActive)
 		{ 
+			
 			raytracer.drawDebugGui(window);
 		}
 
+		
 		raytracer.update();
 	}
 

@@ -1,0 +1,82 @@
+cmake_minimum_required(VERSION 3.7.2)
+
+# set the project name
+project(VGM)
+
+# set c++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+#add library
+add_library(${PROJECT_NAME}
+    VulkanErrorHandling.h
+    VulkanContext.h
+    VulkanContext.cpp
+    RenderpassBuilder.h
+    RenderpassBuilder.cpp
+    PipelineBuilder.h
+    PipelineBuilder.cpp
+    Texture.h
+    Texture.cpp
+    Buffer.h
+    Buffer.cpp
+    Shader.h
+    Shader.cpp
+    ShaderProgramContext.h
+    ShaderProgramContext.cpp
+    Framebuffer.h
+    Framebuffer.cpp
+    CommandBuffer.h
+    CommandBuffer.cpp
+    CommandBufferAllocator.h
+    CommandBufferAllocator.cpp
+    DescriptorSet.h
+    DescriptorSet.cpp
+    DescriptorSetAllocator.h
+    DescriptorSetAllocator.cpp
+    Utils.h
+    Utils.cpp
+    Config.h
+    VkBootstrap.cpp
+    Extensions.h
+    Extensions.cpp
+    ComputeShaderProgram.h
+    ComputeShaderProgram.cpp
+)
+
+target_include_directories(${PROJECT_NAME} PUBLIC
+    "C:/VulkanSDK/1.3.231.1/Include"
+)
+
+#add spirv-cross
+find_package(spirv_cross_core CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-core)
+
+find_package(spirv_cross_glsl CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-glsl)
+
+find_package(spirv_cross_hlsl CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-hlsl)
+
+find_package(spirv_cross_msl CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-msl)
+
+find_package(spirv_cross_util CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-util)
+
+find_package(spirv_cross_reflect CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-reflect)
+
+find_package(spirv_cross_cpp CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-cpp)
+
+find_package(spirv_cross_c CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC spirv-cross-c)
+
+#add SDL2
+find_package(SDL2 CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2 SDL2::SDL2main)
+
+#add Vulkan
+find_package(Vulkan REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC Vulkan::Vulkan)

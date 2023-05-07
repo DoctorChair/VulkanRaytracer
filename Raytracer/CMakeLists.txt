@@ -7,6 +7,8 @@ project(Raytracer)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+add_subdirectory(VGM)
+
 #add library
 add_library(${PROJECT_NAME}
 Raytracer.h
@@ -42,11 +44,8 @@ target_include_directories(${PROJECT_NAME}  PUBLIC
     "${CMAKE_SOURCE_DIR}/external/imgui/backends"
 )
 
-#add imGui
-target_link_libraries(${PROJECT_NAME} PUBLIC "${PROJECT_SOURCE_DIR/build/external/Debug/imgui.lib}")
-
 #add VGM subproject
-target_link_libraries(${PROJECT_NAME} PUBLIC C:/Users/Eric/projects/VGM/build/VGM/Debug/VGM.lib)
+target_link_libraries(${PROJECT_NAME} PUBLIC VGM)
 
 #add SDL2
 find_package(SDL2 CONFIG REQUIRED)
