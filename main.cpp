@@ -148,8 +148,8 @@ int main(int argc, char* argv[])
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
 	PointLightSourceInstance p;
-	p.position = glm::vec3(0.0f, 4.0f, 0.0f);
-	p.radius = 0.3f;
+	p.position = glm::vec3(0.0f, 8.0f, 0.0f);
+	p.radius = 0.5f;
 	p.strength = 50.0f;
 	p.lightModel = pointLightInstance;
 

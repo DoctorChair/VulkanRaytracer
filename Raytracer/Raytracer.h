@@ -159,6 +159,7 @@ struct GlobalRenderData
 	uint32_t nativeResolutionWidth;
 	uint32_t nativeResolutionHeight;
 	uint32_t environmentTextureIndex;
+	float heurisitcExponent = 1.0f;
 };
 
 struct CameraData
@@ -372,6 +373,12 @@ private:
 	uint32_t _shadowSampleCount = 1;
 	uint32_t _historyLength = 32;
 	uint32_t _currentBackProjectionLength = 1;
+	float _heuristicExponent = 1.0;
+
+	float _radius = 1.0f;
+	float _intensity = 100.0f;
+	float _thetaSun = 0.0f;
+	float _PhiSun = 0.0f;
 
 	uint32_t nativeWidth = 1920;
 	uint32_t nativeHeight = 1080;

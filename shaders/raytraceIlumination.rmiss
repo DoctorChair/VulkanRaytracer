@@ -20,6 +20,7 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
   	uint environmentTextureIndex;
+	float heuristicExponent;
 } globalDrawData;
 
 

@@ -29,6 +29,7 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
   uint environmentTextureIndex;
+  float heuristicExponent;
 } globalDrawData;
 
 
@@ -90,8 +91,8 @@ void main()
   else
   {
   
-    normal.xyz = normalize(normal.xyz);
-    float reflectance = 0.04;	
+  normal.xyz = normalize(normal.xyz);
+  float reflectance = 0.04;		
 	float roughness = roughnessMetalness.x;
 	float metallic = roughnessMetalness.y;
 
@@ -104,7 +105,7 @@ void main()
   vec2 offset = vec2(float((globalDrawData.frameNumber) % globalDrawData.historyLength)) / imageDimesions;
   vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), inUV * imageDimesions / 1024.0 + offset);
 
-  float filterExponent = 1.0;
+  float filterExponent = globalDrawData.heuristicExponent;
   
   vec3 radiance = vec3(0.0, 0.0, 0.0);
 
@@ -166,7 +167,6 @@ void main()
   for(uint i = 0; i < globalDrawData.sunLightCount; i++)
   {
     vec3 lightDirection = -sunLightBuffer.sunLights[i].direction;
-    float range = tMax;
     lightDirection = normalize(lightDirection);
 
     vec3 lightSourceRadiance = vec3(0.0);
@@ -179,10 +179,10 @@ void main()
     float radius = sunLightBuffer.sunLights[i].radius;
     vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, noise.y * 2.0 - 0.5));
 
-    float cosTheta = max(dot(lightDirection, normal.xyz), 0.0);
+    float cosTheta = max(dot(lightSampleDirection, normal.xyz), 0.0);
 
     float area = M_PI*pow(radius, 2.0);
-    float p = max(dot(-lightSampleDirection, -lightDirection), 0.0);
+    float p = max(dot(lightSampleDirection, lightDirection), 0.0);
 
     traceRayEXT(topLevelAS, // acceleration structure
     shadowRayFlags,       // rayFlags
@@ -199,7 +199,7 @@ void main()
 
     vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 
-	vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, color.xyz, metallic, roughness, reflectance);
+	  vec3 brdf = cookTorranceGgxBRDF(viewDirection, lightSampleDirection, normal.xyz, color.xyz, metallic, roughness, reflectance);
     vec3 lightRadiance = sunLightBuffer.sunLights[i].strength * lightColor * cosTheta * p * area * shadowPayload;
 	  lightSourceRadiance = lightSourceRadiance + brdf * lightRadiance;
 

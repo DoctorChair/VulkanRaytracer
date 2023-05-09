@@ -1044,6 +1044,7 @@ void Raytracer::executeDefferedPass()
 	_globalRenderData.historyIndex = _historyBuffer.currentIndex;
 	_globalRenderData.nativeResolutionWidth = nativeWidth;
 	_globalRenderData.nativeResolutionHeight = nativeHeight;
+	_globalRenderData.heurisitcExponent = _heuristicExponent;
 
 	_cameraBuffers[_currentFrameIndex].uploadData(&_cameraData, sizeof(CameraData), _vulkan._generalPurposeAllocator);
 	_globalRenderDataBuffers[_currentFrameIndex].uploadData(&_globalRenderData, sizeof(GlobalRenderData), _vulkan._generalPurposeAllocator);
@@ -1661,7 +1662,17 @@ void Raytracer::drawScene()
 {
 	if (_scene.meshInstances != nullptr)
 	{
-		
+		SunLight sun;
+		sun.color = glm::vec3(1.0f);
+		sun.direction = glm::vec3(cos(_PhiSun) * sin(_thetaSun),
+								-cos(_thetaSun),
+								sin(_PhiSun) * sin(_thetaSun)
+								);
+		sun.radius = _radius;
+		sun.strength = _intensity;
+
+		drawSunLight(sun);
+
 		for (unsigned int i = 0; i < _scene.meshInstances->size(); i++)
 		{
 			_scene.meshInstances->at(i).previousTransform = _scene.meshInstances->at(i).transform;
@@ -1702,9 +1713,14 @@ void Raytracer::drawDebugGui(SDL_Window* window)
  		ImGui::Begin("Debug window", &_guiActive, ImGuiWindowFlags_MenuBar);
 		if (_guiActive)
 		{
-			ImGui::DragInt("Num Light samples", &lightSampels, 1.0f, 1, 128);
-			ImGui::DragInt("Num Diffuse samples", &diffuseSamples, 1.0f, 0, 128);
-			ImGui::DragInt("Num Specular samples", &specularSamples, 1.0f, 0, 128);
+			ImGui::DragInt("Num Light samples", &lightSampels, 1.0f, 1, 64);
+			ImGui::DragInt("Num Diffuse samples", &diffuseSamples, 1.0f, 0, 64);
+			ImGui::DragInt("Num Specular samples", &specularSamples, 1.0f, 0, 64);
+			ImGui::DragFloat("Heuristik exponent", &_heuristicExponent, 0.1f, 1.0f, 50.0f);
+			ImGui::DragFloat("Sun Theta Angle", &_thetaSun, 0.1f, -3.14, 3.14);
+			ImGui::DragFloat("Sun Phi Angle", &_PhiSun, 0.1f, -3.14, 3.14);
+			ImGui::DragFloat("Light radius", &_radius, 0.1f, 0.01f, 50.0f);
+			ImGui::DragFloat("Light intensity", &_intensity, 0.01f, 0.1f, 5000.0f);
 			ImGui::DragInt("Num Back projection steps", &backProjectionLength, 1.0f, 1, _historyLength);
 			ImGui::Text("Press CTRL to lock Camera!");
 			ImGui::Text("Press ALT to hide GUI!");
@@ -1726,7 +1742,7 @@ void Raytracer::drawDebugGui(SDL_Window* window)
 			}
 			if (ImGui::Button("Load Scene"))
 			{
-				loadScene("C:\\Users\\Eric\\projects\\scenes\\sponza\\NewSponza_Main_glTF_NoDecals_Mirror_002.gltf");
+				loadScene("C:\\Users\\Eric\\projects\\scenes\\sponza\\sponza.gltf");
 			}
 			if(_captureActive)
 			{ 

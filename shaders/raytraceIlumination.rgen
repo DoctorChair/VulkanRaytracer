@@ -30,6 +30,7 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
   uint environmentTextureIndex;
+  float heuristicExponent;
 } globalDrawData;
 
 
@@ -64,7 +65,8 @@ layout(set = 6, binding = 0) uniform texture2D textures[1024];
 struct hitPayload
 {
     uint depth;
-  vec3 radiance;
+    vec3 radiance;
+    bool HitLightSource;
 };
 
 layout(location = 1) rayPayloadEXT hitPayload payload;
@@ -112,7 +114,7 @@ void main()
   vec2 offset = vec2(float((globalDrawData.frameNumber) % globalDrawData.historyLength)) / imageDimesions;
   vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), inUV * imageDimesions / 1024.0 + offset);
 
-  float filterExponent = 1.0;
+  float filterExponent = globalDrawData.heuristicExponent;
   
   vec3 radiance = vec3(0.0, 0.0, 0.0);
 
@@ -299,7 +301,7 @@ void main()
         1               // payload (location = 0)
         );
 
-    vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, color.xyz, metallic, roughness, reflectance); 
+    vec3 brdf = ggxSpecularBRDF(viewDirection, reflectionDirection, normal.xyz, halfwayVector, color.xyz, metallic, roughness, reflectance); 
 
     specularRadiance = specularRadiance + weight * (payload.radiance * cosTheta * brdf);
 	} 

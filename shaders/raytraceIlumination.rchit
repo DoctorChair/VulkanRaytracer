@@ -32,6 +32,7 @@ layout(set = 0, binding = 1) uniform  RenderBuffer{
 	uint nativeResolutionWidth;
 	uint nativeResolutionHeight;
 	uint environmentTextureIndex;
+	float heuristicExponent;
 } globalDrawData;
 
 layout(set = 1, binding = 0) uniform sampler2D primaryRayColorTexture;
@@ -74,8 +75,9 @@ layout(set = 6, binding = 0) uniform texture2D textures[1024];
 
 struct hitPayload
 {
-	  uint depth;
-  vec3 radiance;
+	uint depth;
+  	vec3 radiance;
+	bool HitLightSource;
 };
 
 layout(location = 0) rayPayloadEXT float shadowPayload;
@@ -115,49 +117,55 @@ void main()
 
 	vec3 position = v0.position.xyz * barycentrics.x + v1.position.xyz * barycentrics.y + v2.position.xyz * barycentrics.z;
 	vec3 worldPosition = vec3((gl_ObjectToWorldEXT * vec4(position, 1.0)));
-    
+
 	vec3 meshNormal = v0.normal.xyz * barycentrics.x + v1.normal.xyz * barycentrics.y + v2.normal.xyz * barycentrics.z;
-    vec3 worldMeshNormal = normalize(vec3(gl_WorldToObjectEXT * vec4(meshNormal, 0.0)));
-    
-	vec3 meshTangnet = v0.tangent.xyz * barycentrics.x + v1.tangent.xyz * barycentrics.y + v2.tangent.xyz * barycentrics.z;
-    vec3 worldMeshTangnet = normalize(vec3(gl_WorldToObjectEXT * vec4(meshTangnet, 0.0)));
-    
+    mat3 normalMatrix = transpose(inverse(mat3(modelMatrix)));
+	vec3 worldNormal = normalize(normalMatrix * normalize(meshNormal.xyz));
+
 	vec2 texCoord = v0.texCoordPair.xy * barycentrics.x + v1.texCoordPair.xy * barycentrics.y + v2.texCoordPair.xy * barycentrics.z;
 
-    vec3 worldMeshBitagnent = cross(worldMeshNormal, worldMeshTangnet);
-    
-	mat3 tbnMatrix = {worldMeshTangnet, -worldMeshBitagnent, worldMeshNormal};
-	float tMin = 0.01;
-	float tMax = 100.0;
-
+	
 	vec4 colorTexture = texture(sampler2D(textures[material.albedoIndex], nearestSampler), texCoord);
 	vec4 normalTexture = texture(sampler2D(textures[material.normalIndex], nearestSampler), texCoord);
 	vec4 metallicTexture = texture(sampler2D(textures[material.metallicIndex], nearestSampler), texCoord);
     vec4 roughnessTexture = texture(sampler2D(textures[material.roughnessIndex], nearestSampler), texCoord);
     vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], nearestSampler), texCoord);
 	vec3 normal;
+
+	float emissiveStrength = instanceData.emissinIntensity;
 	
 	if(material.normalIndex != 0)
 	{
-		normal = normalize(tbnMatrix * normalTexture.xyz);
+		vec3 meshTangnet = v0.tangent.xyz * barycentrics.x + v1.tangent.xyz * barycentrics.y + v2.tangent.xyz * barycentrics.z;
+		vec3 worldTangent =  normalize(normalMatrix * normalize(meshTangnet.xyz));
+		worldTangent = normalize(worldTangent - dot(worldTangent, worldNormal) * worldNormal);
+		vec3 worldBitagnent =  normalize(cross(worldNormal, worldTangent));
+		mat3 tbnMatrix = {worldTangent, -worldBitagnent, worldNormal};
+
+		vec3 n = normalize(normalTexture.xyz * 2.0 - 1.0); 
+
+		normal = normalize(tbnMatrix * n);
 	}
 	else
 	{
-		normal = worldMeshNormal;
+		normal = worldNormal;
 	}
 
+	float tMin = 0.01;
+	float tMax = 100.0;
 	float reflectance = 0.04;	
 	float roughness = roughnessTexture.y;
 	float metallic = metallicTexture.z;
-
-	float filterExponent = 1.0;
+	
+	float filterExponent = globalDrawData.heuristicExponent;
 
 	uint  rayFlags = gl_RayFlagsOpaqueEXT;
 	uint  shadowRayFlags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
 
-	vec2 offset = vec2(gl_LaunchIDEXT.xy) / vec2(1920, 1080);
+	vec2 imageDimesions = vec2(float(globalDrawData.nativeResolutionWidth), float(globalDrawData.nativeResolutionHeight));
 
-	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), offset);
+	vec2 offset = vec2(float((globalDrawData.frameNumber) % globalDrawData.historyLength)) / imageDimesions;
+  	vec4 screenNoise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), gl_LaunchIDEXT.xy/imageDimesions * imageDimesions / 1024.0 + offset);
 
 	if(incomigPayload.depth < globalDrawData.maxRecoursionDepth)
 	{
@@ -206,8 +214,10 @@ void main()
 	{
 		shadowPayload = 0.0;
 
-		vec3 lightDirection = sunLightBuffer.sunLights[i].direction;
+		vec3 lightDirection = -sunLightBuffer.sunLights[i].direction;
+		float area = M_PI*pow(sunLightBuffer.sunLights[i].radius, 2.0);
 		float cosTheta = dot(lightDirection, normal);
+		
 		if(cosTheta >= 0)
 		{
 		traceRayEXT(topLevelAS, // acceleration structure
@@ -225,11 +235,11 @@ void main()
 
 		vec3 lightColor = normalize(sunLightBuffer.sunLights[i].color.xyz);
 		
-		vec3 viewDirection = worldPosition - gl_WorldRayOriginEXT;
+		vec3 viewDirection = normalize(worldPosition - gl_WorldRayOriginEXT);
 
 	    vec3 brdf = cookTorranceGgxBRDF(-viewDirection, lightDirection, normal, colorTexture.xyz, metallic, roughness, reflectance);
 
-		vec3 lightRadiance = lightColor * sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload;
+		vec3 lightRadiance = lightColor * sunLightBuffer.sunLights[i].strength * max(cosTheta, 0.0) * shadowPayload * area;
 
 		radiance = radiance + brdf * lightRadiance;
 		}
@@ -241,6 +251,8 @@ void main()
 	vec3 specularRadiance = vec3(0.0);
 	
 		incomigPayload.depth++;
+
+		incomigPayload.HitLightSource = false;
 
 		if(metallic < 0.8)
     	{
@@ -271,10 +283,12 @@ void main()
 
 		vec3 r0 = mix(vec3(reflectance), colorTexture.xyz, metallic);
     	vec3 fresnel = fresnelSchlick(r0, cosTheta);
-		vec3 lambert = colorTexture.xyz * (vec3(1.0) - fresnel) * (1.0 - metallic);
+		vec3 lambert = colorTexture.xyz/M_PI * (vec3(1.0) - fresnel) * (1.0 - metallic);
 		
 		diffuseRadiance = diffuseRadiance + weight * (lambert * cosTheta * incomigPayload.radiance / pdfValue);
 		}
+
+		incomigPayload.HitLightSource = false;
 
 		{
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.yx);
@@ -287,9 +301,10 @@ void main()
     	float weight = veachPowerHeurisitk(p ,lambertPDFValue, filterExponent);
 		weight = weight / p *  (float(metallic < 0.8)) + 1.0 * (float(metallic >= 0.8));
 
-		vec3 halfwayVector = createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y);
+		vec3 halfwayVector = normalize(createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y));
 
-    	vec3 reflectionDirection = reflect(-gl_WorldRayDirectionEXT, halfwayVector);
+		vec3 incomingDirection = normalize(worldPosition - gl_WorldRayOriginEXT);
+    	vec3 reflectionDirection = reflect(incomingDirection, halfwayVector);
 
 		float cosTheta =  max(dot(reflectionDirection, normal), 0.0);
 
@@ -306,19 +321,19 @@ void main()
         1               // payload (location = 0)
         );
 		
-		vec3 brdf = ggxSpecularBRDF(gl_WorldRayDirectionEXT, reflectionDirection, normal.xyz, colorTexture.xyz, metallic, roughness, reflectance);
+		vec3 brdf = ggxSpecularBRDF(-incomingDirection, reflectionDirection, halfwayVector, normal.xyz, colorTexture.xyz, metallic, roughness, reflectance);
 
 		specularRadiance = specularRadiance + weight * ( incomigPayload.radiance * cosTheta * brdf); 
 		}
-	
+
 	incomigPayload.depth--;
 
-	radiance = radiance + specularRadiance +  diffuseRadiance;
+	radiance = radiance /* + specularRadiance */ +  diffuseRadiance;
 	
 	}
 	} 
-
+	
 	radiance = radiance + emissionTexture.xyz;
-
-	incomigPayload.radiance = radiance;
+	incomigPayload.HitLightSource = (instanceData.emissinIntensity>0.0);
+	incomigPayload.radiance = radiance; 
 }

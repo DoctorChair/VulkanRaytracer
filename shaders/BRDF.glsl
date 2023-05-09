@@ -2,9 +2,12 @@
 
 float ndfGGX(float normalDotHalfway, float alpha)
 {
-	float alphaSquared = alpha * alpha;
-	float normalDotHalfwaySquared = normalDotHalfway * normalDotHalfway;
-	return alphaSquared / (M_PI * pow(normalDotHalfwaySquared * (alphaSquared - 1.0 ) + 1.0, 2.0 ));
+	float alpha2 = alpha*alpha;
+    float normalDotHalfway2 = normalDotHalfway*normalDotHalfway;
+	
+    float a  = alpha2;
+    float b  =  M_PI * (normalDotHalfway2 * (alpha2 - 1.0) + 1.0);
+	return min(max(a / (b * b), 0.0), 1.0);
 }
 
 float schlickGGX(float v, float k)
@@ -26,49 +29,44 @@ vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, v
 {
 	vec3 halfwayVector = normalize(viewDirection + lightDirection);
 
-	vec3 r0 = mix(vec3(reflectance), color, metallic);
+	vec3 r0 = vec3(reflectance * reflectance * 0.16);
+	r0 = mix(r0, color, metallic);
 
-	roughness = max(roughness, 0.000001);
+	float normalDotLightDir = max(dot(normal, lightDirection), 0.0);
+	float normalDotView = max(dot(normal, viewDirection), 0.0);
+	float normalDotHalfway = min(max(dot(normal, halfwayVector),  0.0), 0.999999999);
 
-	float normalDotLightDir = max(dot(normal, lightDirection), 0.0001);
-	float normalDotView = max(dot(normal, viewDirection), 0.0001);
-	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0001);
-
-	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
+	vec3 fresnel = fresnelSchlick(r0, normalDotView);
 	float geometric = geometricFunction(normalDotView, normalDotLightDir, pow(roughness+1.0, 2.0) / 8.0);
-	float ndf = ndfGGX(normalDotHalfway, roughness);
+	float ndf = ndfGGX(normalDotHalfway, roughness * roughness);
 
 	vec3 specular = ( ndf * fresnel * geometric )
-					/ (4 * normalDotLightDir * normalDotView);
+					/ max(4 * normalDotLightDir * normalDotView, 0.00001);
 
 	vec3 lambert = color;
 	lambert = lambert * (vec3(1.0) - fresnel) * (1.0 - metallic);
-	//lambert = lambert * (1.0 - metallic); */
 	lambert = lambert / M_PI;
 
 	return lambert + specular;
 }
 
 
-vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 color, float metallic, float roughness, float reflectance)
+vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 halfwayVector, vec3 color, float metallic, float roughness, float reflectance)
 {
-	vec3 halfwayVector = normalize(viewDirection + lightDirection);
+	vec3 r0 = vec3(reflectance * reflectance * 0.16);
+	r0 = mix(r0, color, metallic);
 
-	vec3 r0 = mix(vec3(reflectance), color, metallic);
+	float normalDotLightDir = max(dot(normal, lightDirection), 0.0);
+	float normalDotView = max(dot(normal, viewDirection), 0.0);
+	float normalDotHalfway = max(dot(normal, halfwayVector),  0.0);
 
-	roughness = max(roughness, 0.000001);
-
-	float normalDotLightDir = max(dot(normal, lightDirection), 0.0001);
-	float normalDotView = max(dot(normal, viewDirection), 0.0001);
-	float normalDotHalfway = max(dot(normal, halfwayVector), 0.0001);
-
-	vec3 fresnel = fresnelSchlick(r0, normalDotLightDir);
+	vec3 fresnel = fresnelSchlick(r0, normalDotView);
 	float geometric = geometricFunction(normalDotView, normalDotLightDir, roughness * roughness * 0.5);
-	float ndf = ndfGGX(normalDotHalfway, roughness);
+	float ndf = ndfGGX(normalDotHalfway, roughness * roughness);
 
-	vec3 specular = ( ndf * fresnel * geometric )
-					/ (4 * normalDotLightDir * normalDotView);
-
+	vec3 specular = ( ndf *  fresnel * geometric )
+					/ max(4 * normalDotLightDir * normalDotView, 0.00001);
+	
 	return specular;
 }
 
@@ -94,9 +92,13 @@ vec3 createSampleVector(vec3 originVector, float maxThetaDeviationAngle, float m
 vec3 createLightSampleVector(vec3 originVector, float radius, float randomTheta, float randomPhi)
 {
 	float r = sqrt(randomTheta);
+
 	float angle = M_PI * 2.0 * randomPhi;
+
 	vec2 diskSample = vec2(r * cos(angle) * radius, r * sin(angle)) * radius;
+
 	vec3 tangent = normalize(cross(originVector, vec3(0.0, 1.0, 0.0)));
+	
 	vec3 bitanget = normalize(cross(tangent, originVector));
 	
 	return vec3(originVector + diskSample.x * tangent + diskSample.y * bitanget); 

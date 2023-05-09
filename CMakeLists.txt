@@ -21,8 +21,6 @@ add_executable(${PROJECT_NAME}
 #add includes
 target_include_directories(${PROJECT_NAME}  PUBLIC
    "${PROJECT_BINARY_DIR}"
-   "${PROJECT_SOURCE_DIR}/external/imGui"
-   "${PROJECT_SOURCE_DIR}/external/imGui/backends"
 )
 
 #add ModelLoading subproject
