@@ -29,7 +29,7 @@ vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, v
 {
 	vec3 halfwayVector = normalize(viewDirection + lightDirection);
 
-	vec3 r0 = vec3(reflectance * reflectance * 0.16);
+	vec3 r0 = vec3(reflectance);
 	r0 = mix(r0, color, metallic);
 
 	float normalDotLightDir = max(dot(normal, lightDirection), 0.0);
@@ -53,7 +53,7 @@ vec3 cookTorranceGgxBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, v
 
 vec3 ggxSpecularBRDF(vec3 viewDirection, vec3 lightDirection, vec3 normal, vec3 halfwayVector, vec3 color, float metallic, float roughness, float reflectance)
 {
-	vec3 r0 = vec3(reflectance * reflectance * 0.16);
+	vec3 r0 = vec3(reflectance);
 	r0 = mix(r0, color, metallic);
 
 	float normalDotLightDir = max(dot(normal, lightDirection), 0.0);

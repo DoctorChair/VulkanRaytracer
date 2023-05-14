@@ -179,6 +179,7 @@ struct FrameSynchro
 	VkSemaphore _defferedRenderSemaphore;
 	VkSemaphore _raytraceSemaphore;
 	VkSemaphore _postProcessSemaphore;
+	VkSemaphore _overlapSemaphore;
 	VkSemaphore _guiSemaphore;
 	VkSemaphore _presentSemaphore;
 	VkFence _frameFence;
@@ -270,7 +271,8 @@ public:
 	//update tlas and place draw call;
 	void drawMeshInstance(MeshInstance instance, uint32_t cullMask);
 	void drawLightMeshInstance(MeshInstance meshInstance, uint32_t cullMask, float intenisty);
-	void setNoiseTextureIndex(uint32_t index);
+	void setBlueNoiseTextureIndex(uint32_t index);
+	void setRandomValueTextureIndex(uint32_t index);
 	void setEnvironmentTextureIndex(uint32_t index);
 
 	void drawMesh(Mesh mesh, glm::mat4 transform, uint32_t objectID);
@@ -379,6 +381,10 @@ private:
 	float _intensity = 100.0f;
 	float _thetaSun = 0.0f;
 	float _PhiSun = 0.0f;
+
+	uint32_t _blueNoiseSampleIndex = 0;
+	uint32_t _randomUniformSampleIndex = 0;
+	bool _useBlueNoise = false;
 
 	uint32_t nativeWidth = 1920;
 	uint32_t nativeHeight = 1080;

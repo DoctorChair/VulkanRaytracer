@@ -664,9 +664,14 @@ void Raytracer::drawPointLight(PointLightSourceInstance light)
 		drawLightMeshInstance(light.lightModel, 0x10, light.strength);
 }
 
-void Raytracer::setNoiseTextureIndex(uint32_t index)
+void Raytracer::setBlueNoiseTextureIndex(uint32_t index)
 {
-	_globalRenderData.noiseSampleTextureIndex = index;
+	_blueNoiseSampleIndex= index;
+}
+
+void Raytracer::setRandomValueTextureIndex(uint32_t index)
+{
+	_randomUniformSampleIndex = index;
 }
 
 void Raytracer::setCamera(glm::mat4 viewMatrix, glm::mat4 projectionMatrix, glm::vec3 position)
@@ -1484,7 +1489,7 @@ void Raytracer::executePostProcessPass()
 
 		i++;
 	}
-	
+
 	VkDescriptorImageInfo inputInfo = {};
 	inputInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	inputInfo.imageView = _leapFrogBuffer.views[i % 2];
@@ -1508,10 +1513,39 @@ void Raytracer::executePostProcessPass()
 
 	postProcessCmd->end();
 	
-	VkPipelineStageFlags waitStageFlags = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-	VK_CHECK(postProcessCmd->submit(&currentPostProcessSemaphore, 1
-		, &_frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore, 1
-		, &waitStageFlags, VK_NULL_HANDLE, _vulkan._computeQueue));
+	
+	VkSemaphore signalSemaphores[2];
+
+	signalSemaphores[0] = _frameSynchroStructs[_currentFrameIndex]._postProcessSemaphore,
+	signalSemaphores[1] = _frameSynchroStructs[_currentFrameIndex]._overlapSemaphore;
+
+	VkPipelineStageFlags stages[2];
+	if(_frameNumber == 0)
+	{ 
+		VkSemaphore waitSemaphores[1];
+		VkPipelineStageFlags stages[1];
+		
+		waitSemaphores[0] = _frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore;
+		stages[0] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+		VK_CHECK(postProcessCmd->submit(signalSemaphores, 2
+			, waitSemaphores, std::size(waitSemaphores)
+			, stages, VK_NULL_HANDLE, _vulkan._computeQueue));
+	}
+	else
+	{
+		VkSemaphore waitSemaphores[2];
+		VkPipelineStageFlags stages[2];
+
+		waitSemaphores[0] = _frameSynchroStructs[_currentFrameIndex]._raytraceSemaphore;
+		waitSemaphores[1] = _frameSynchroStructs[(_frameNumber + 1) % _concurrencyCount]._overlapSemaphore;
+		stages[0] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+		stages[1] = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+		VK_CHECK(postProcessCmd->submit(signalSemaphores, 2
+			, waitSemaphores, std::size(waitSemaphores)
+			, stages, VK_NULL_HANDLE, _vulkan._computeQueue));
+	}
 }
 
 void Raytracer::executeGuiPass()
@@ -1547,7 +1581,10 @@ void Raytracer::executeGuiPass()
 
 	_guiCommandBuffers[_currentFrameIndex].end();
 
+	
+
 	VkPipelineStageFlags stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
 	_guiCommandBuffers[_currentFrameIndex].submit(&_frameSynchroStructs[_currentFrameIndex]._guiSemaphore, 1
 		, &_frameSynchroStructs[_currentFrameIndex]._postProcessSemaphore, 1
 		, &stage, _frameSynchroStructs[_currentFrameIndex]._frameFence, _vulkan._graphicsQeueu);
@@ -1628,25 +1665,25 @@ void Raytracer::getTimestamps()
 
 void Raytracer::writeToCSV(std::string path, unsigned int length, unsigned int start)
 {
-	ofstream gBufferfile(path + "\\GBufferPassIntervals.csv");
+	ofstream gBufferfile(path + "\\GBufferPass32TemporalIntervals.csv");
 	for(unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		gBufferfile << _measurments._gBufferPassIntervals[i];
 		gBufferfile << ",";
 	}
-	ofstream Raytracefile(path + "\\RaytracePassIntervals.csv");
+	ofstream Raytracefile(path + "\\RaytracePass32TemporalIntervals.csv");
 	for (unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		Raytracefile << _measurments._raytracePassIntervals[i];
 		Raytracefile << ",";
 	}
-	ofstream PostProcessFile(path + "\\PostProcessPassIntervals.csv");
+	ofstream PostProcessFile(path + "\\PostProcessPass32TemporalIntervals.csv");
 	for (unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		PostProcessFile << _measurments._postProcessPassIntervals[i];
 		PostProcessFile << ",";
 	}
-	ofstream guiFile(path + "\\GuiPassIntervals.csv");
+	ofstream guiFile(path + "\\GuiPass32TemporalIntervals.csv");
 	for (unsigned int i = 0; i < _capturePeriodLength; i++)
 	{
 		guiFile << _measurments._guiPassIntervals[i];
@@ -1707,6 +1744,7 @@ void Raytracer::drawDebugGui(SDL_Window* window)
 	int specularSamples = _specularSampleCount;
 	int captureSeriesLength = _capturePeriodLength;
 	int backProjectionLength = _currentBackProjectionLength;
+	
 	std::string targetPath;
 	ImGui::NewFrame();
 	
@@ -1724,6 +1762,15 @@ void Raytracer::drawDebugGui(SDL_Window* window)
 			ImGui::DragInt("Num Back projection steps", &backProjectionLength, 1.0f, 1, _historyLength);
 			ImGui::Text("Press CTRL to lock Camera!");
 			ImGui::Text("Press ALT to hide GUI!");
+			ImGui::Checkbox("Use blue noise texture", &_useBlueNoise);
+			if(_useBlueNoise)
+			{
+				_globalRenderData.noiseSampleTextureIndex = _blueNoiseSampleIndex;
+			}
+			else
+			{
+				_globalRenderData.noiseSampleTextureIndex = _randomUniformSampleIndex;
+			}
 			ImGui::DragInt("Capture length", &captureSeriesLength, 1.0f, 1, 1000);
 			if(ImGui::Button("Capture Next 1000 frames"))
 			{
@@ -2232,6 +2279,7 @@ void Raytracer::initSyncStructures()
 		vkCreateFence(_vulkan._device, &fenceCreateInfo, nullptr, &_frameSynchroStructs[i]._frameFence);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._defferedRenderSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._postProcessSemaphore);
+		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._overlapSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._raytraceSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._presentSemaphore);
 		vkCreateSemaphore(_vulkan._device, &semaphoreCreateInfo, nullptr, &_frameSynchroStructs[i]._guiSemaphore);

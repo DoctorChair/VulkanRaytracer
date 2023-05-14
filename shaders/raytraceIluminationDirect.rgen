@@ -126,7 +126,7 @@ void main()
       float radius = pointLightBuffer.pointLights[i].radius;
       
       
-      vec3 sphereSamplePoint = createLightSamplePoint(-lightDirection,  pointLightBuffer.pointLights[i].position, radius, noise.x, (noise.y * 2.0 - 0.5));
+      vec3 sphereSamplePoint = createLightSamplePoint(-lightDirection,  pointLightBuffer.pointLights[i].position, radius, noise.x, (noise.y * 2.0 - 1.0));
       vec3 lightSampleDirection = sphereSamplePoint - samplePosition.xyz;
       float sphereDistance = length(lightSampleDirection);
       lightSampleDirection = normalize(lightSampleDirection);
@@ -177,7 +177,7 @@ void main()
     vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.xy + vec2(float(s)) / imageDimesions);
 
     float radius = sunLightBuffer.sunLights[i].radius;
-    vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, noise.y * 2.0 - 0.5));
+    vec3 lightSampleDirection = normalize(createLightSampleVector(lightDirection, radius, noise.x, noise.y * 2.0 - 1.0));
 
     float cosTheta = max(dot(lightSampleDirection, normal.xyz), 0.0);
 

@@ -260,7 +260,7 @@ void main()
     
 		float ggxPdfValue = ggxImportanceCDF(noise.x, roughness * roughness);
 		ggxPdfValue = ggxImportancePDF(ggxPdfValue, roughness * roughness);
-    	vec3 sampleDirection = createCosineWeightedHemisphereSample(normal.xyz, noise.x, noise.y * 2.0 - 0.5);
+    	vec3 sampleDirection = createCosineWeightedHemisphereSample(normal.xyz, noise.x, noise.y * 2.0 - 1.0);
     	float pdfValue = sqrt(1.0 - noise.x);
 
 		float cosTheta =  max(dot(sampleDirection, normal), 0.0);
@@ -310,7 +310,7 @@ void main()
     	float weight = veachPowerHeurisitk(p ,lambertPDFValue, filterExponent);
 		weight = weight / p *  (float(metallic < 0.8)) + 1.0 * (float(metallic >= 0.8));
 
-		vec3 halfwayVector = normalize(createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y));
+		vec3 halfwayVector = normalize(createSampleVector(normal.xyz, 1.0, 2.0 * M_PI, pdfValue, noise.y * 2.0 - 1.0));
 
 		vec3 incomingDirection = normalize(worldPosition - gl_WorldRayOriginEXT);
     	vec3 reflectionDirection = reflect(incomingDirection, halfwayVector);

@@ -3,7 +3,7 @@
 #include "Raytracer/Raytracer.h"
 #include "glm/gtc/matrix_transform.hpp"
 #include "ModelLoader/TextureLoader.h"
-
+#include <random>
 #include "CameraController.h"
 
 std::vector<MeshInstance>* loadSceneCallback(const std::string& path, Raytracer& raytracer)
@@ -52,6 +52,28 @@ std::vector<MeshInstance>* loadSceneCallback(const std::string& path, Raytracer&
 	return instances;
 }
 
+TextureData createUniformValueTexture(unsigned int width, unsigned int height, unsigned int numChannels)
+{
+	TextureData texture;
+	texture.width = width;
+	texture.height = height;
+	texture.nrChannels = numChannels;
+	texture.pixels.resize(width * height * std::max(numChannels, (unsigned int)4), 0);
+	for (int j = 0; j < numChannels && j<4; j++)
+	{
+		std::random_device rand;
+		std::mt19937 generator(rand());
+		std::uniform_real_distribution<> distribution(0.0, 1.0);
+		for (int n = 0; n < width * height * numChannels - (numChannels-j); n = n + j + 1)
+		{	
+			unsigned char value = static_cast<unsigned char>(floor(distribution(generator) * 255.0));
+			texture.pixels[n] = value;
+		}
+	}
+
+	return texture;
+}
+
 int main(int argc, char* argv[])
 {
 	SDL_Init(SDL_INIT_VIDEO);
@@ -65,15 +87,22 @@ int main(int argc, char* argv[])
 
 	raytracer.registerLoadSceneCallback(callback);
 
+	TextureData uniformRandomeValueTexture = createUniformValueTexture(1024, 1024, 4);
+
 	TextureLoader textureLoader;
 	TextureData noiseTexture = textureLoader.loadTexture("C:\\Users\\Eric\\projects\\textures\\FreeBlueNoiseTextures\\Data\\1024_1024\\LDR_RGBA_0.png");
 	TextureData environmentTexture = textureLoader.loadTexture("C:\\Users\\Eric\\projects\\textures\\evening_meadow_4k.hdr");
 
 	uint32_t noiseTexureIndex = raytracer.loadTexture(noiseTexture.pixels, noiseTexture.width, noiseTexture.height, noiseTexture.nrChannels, "blueNoiseSampleTexture");
-
+	uint32_t uniformRandomNoise = raytracer.loadTexture(uniformRandomeValueTexture.pixels
+		, uniformRandomeValueTexture.width,
+		uniformRandomeValueTexture.height
+		, uniformRandomeValueTexture.nrChannels
+		, "unfirmValuesSampleTexture");
 	uint32_t environmentTextureIndex = raytracer.loadTexture(environmentTexture.pixels, environmentTexture.width, environmentTexture.height, environmentTexture.nrChannels, "environmentMapTexture");
 
-	raytracer.setNoiseTextureIndex(noiseTexureIndex);
+	raytracer.setBlueNoiseTextureIndex(noiseTexureIndex);
+	raytracer.setRandomValueTextureIndex(uniformRandomNoise);
 	raytracer.setEnvironmentTextureIndex(0);
 
 	ModelLoader loader;
@@ -127,11 +156,11 @@ int main(int argc, char* argv[])
 	TextureData* data = loader.getTextureData(pointSource.meshes[0].material.albedo);
 	pointLightInstance.material.albedoIndex = 0;
 	data = loader.getTextureData(pointSource.meshes[0].material.normal);
-	pointLightInstance.material.normalIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.normal);
+	pointLightInstance.material.normalIndex = 0;
 	data = loader.getTextureData(pointSource.meshes[0].material.roughness);
-	pointLightInstance.material.roughnessIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.roughness);
+	pointLightInstance.material.roughnessIndex = 0;
 	data = loader.getTextureData(pointSource.meshes[0].material.metallic);
-	pointLightInstance.material.metallicIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.metallic);
+	pointLightInstance.material.metallicIndex = 0;
 	data = loader.getTextureData(pointSource.meshes[0].material.emission);
 	pointLightInstance.material.emissionIndex = raytracer.loadTexture(data->pixels, data->width, data->height, data->nrChannels, pointSource.meshes[0].material.emission);
 
@@ -148,7 +177,7 @@ int main(int argc, char* argv[])
 	glm::vec3 up = glm::vec3(0.0f, -1.0f, 0.0f);
 
 	PointLightSourceInstance p;
-	p.position = glm::vec3(0.0f, 8.0f, 0.0f);
+	p.position = glm::vec3(0.0f, 4.0f, 0.0f);
 	p.radius = 0.5f;
 	p.strength = 50.0f;
 	p.lightModel = pointLightInstance;
