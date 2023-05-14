@@ -248,7 +248,7 @@ void main()
 
 	vec3 diffuseRadiance = vec3(0.0);
 	
-	if(incomigPayload.depth + 1 < globalDrawData.maxRecoursionDepth && length(radiance) <= 0.001)
+	if(incomigPayload.depth + 1 < globalDrawData.maxRecoursionDepth)
 	{
 		incomigPayload.depth++;	
 
