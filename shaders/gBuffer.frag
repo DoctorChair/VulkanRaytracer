@@ -96,7 +96,7 @@ void main()
 
 	outPosition = position;
 
-	outEmission = (vec4(0, 0, 0, color.w)) + (emission * drawData.instanceData[instanceIndex].emissinIntensity);
+	outEmission = (vec4(0, 0, 0, color.w)) + (emission * drawData.instanceData[instanceIndex].emissionIntensity);
 	
 	vec3 previous = (vec3(previousProjectionSpacePosition.xyz / previousProjectionSpacePosition.w)) * 0.5 + 0.5;
 	vec3 current = (vec3(currentProjectionSpacePosition.xyz / currentProjectionSpacePosition.w)) * 0.5 + 0.5;

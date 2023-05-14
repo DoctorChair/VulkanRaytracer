@@ -44,11 +44,11 @@ layout(set = 2, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 2, binding = 3, rgba16f) uniform image2D image;
 
 layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
-	SunLight sunLights[];
+	DirectionalLight sunLights[];
 } sunLightBuffer;
 
 layout(std430, set = 3, binding = 1) readonly buffer PointBuffer{
-	PointLight pointLights[];
+	SphereLight pointLights[];
 } pointLightBuffer;
 
 

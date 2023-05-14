@@ -55,12 +55,12 @@ layout(std430, set = 2, binding = 2) buffer VertexBuffer
 
 layout(std430, set = 3, binding = 0) readonly buffer SunBuffer{
 
-	SunLight sunLights[];
+	DirectionalLight sunLights[];
 } sunLightBuffer;
 
 layout(std430, set = 3, binding = 1) readonly buffer PointBuffer{
 
-	PointLight pointLights[];
+	SphereLight pointLights[];
 } pointLightBuffer;
 
 layout(set = 4, binding = 0) uniform sampler linearSampler;
@@ -132,7 +132,7 @@ void main()
     vec4 emissionTexture = texture(sampler2D(textures[material.emissionIndex], nearestSampler), texCoord);
 	vec3 normal;
 
-	float emissiveStrength = instanceData.emissinIntensity;
+	float emissiveStrength = instanceData.emissionIntensity;
 	
 	if(material.normalIndex != 0)
 	{
@@ -245,12 +245,12 @@ void main()
 		}
 	}
 
+
+	vec3 diffuseRadiance = vec3(0.0);
+	
 	if(incomigPayload.depth + 1 < globalDrawData.maxRecoursionDepth && length(radiance) <= 0.001)
 	{
-	vec3 diffuseRadiance = vec3(0.0);
-	vec3 specularRadiance = vec3(0.0);
-	
-		incomigPayload.depth++;
+		incomigPayload.depth++;	
 
 		incomigPayload.HitLightSource = false;
 
@@ -288,9 +288,18 @@ void main()
 		diffuseRadiance = diffuseRadiance + weight * (lambert * cosTheta * incomigPayload.radiance / pdfValue);
 		}
 
+		incomigPayload.depth--;
+	}
+
+		vec3 specularRadiance = vec3(0.0);
+
 		incomigPayload.HitLightSource = false;
 
+		if(incomigPayload.depth + 1 < globalDrawData.maxRecoursionDepth)
 		{
+		 
+		incomigPayload.depth++;
+		
 		vec4 noise = texture(sampler2D(textures[globalDrawData.noiseSampleTextureIndex], linearSampler), screenNoise.yx);
     
     	float pdfValue = ggxImportanceCDF(noise.x, roughness);
@@ -323,17 +332,18 @@ void main()
 		
 		vec3 brdf = ggxSpecularBRDF(-incomingDirection, reflectionDirection, halfwayVector, normal.xyz, colorTexture.xyz, metallic, roughness, reflectance);
 
-		specularRadiance = specularRadiance + weight * ( incomigPayload.radiance * cosTheta * brdf); 
+		specularRadiance = specularRadiance + weight * ( incomigPayload.radiance * cosTheta * brdf);
+
+		incomigPayload.depth--; 
 		}
 
-	incomigPayload.depth--;
-
-	radiance = radiance /* + specularRadiance */ +  diffuseRadiance;
 	
-	}
+
+	radiance = radiance + specularRadiance +  diffuseRadiance;
+	
 	} 
 	
 	radiance = radiance + emissionTexture.xyz;
-	incomigPayload.HitLightSource = (instanceData.emissinIntensity>0.0);
+	incomigPayload.HitLightSource = (instanceData.emissionIntensity>0.0);
 	incomigPayload.radiance = radiance; 
 }

@@ -1,4 +1,4 @@
-struct SunLight
+struct DirectionalLight
 {
 	vec3 direction;
 	float radius;
@@ -6,7 +6,7 @@ struct SunLight
 	float strength;
 };
 
-struct PointLight
+struct SphereLight
 {
 	vec3 position;
 	float radius;
@@ -41,7 +41,7 @@ struct drawInstanceData
 	uint ID;
 	uint vertexOffset;
 	uint indicesOffset;
-	float emissinIntensity;
+	float emissionIntensity;
 	};
 
 struct Vertex
