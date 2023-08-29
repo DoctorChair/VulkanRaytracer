@@ -17,7 +17,8 @@ Rendered images contain raytraced cast shadows, diffuse reflections and specular
 Via backprojection multiple past frames are combined to a single frame to enable real-time-framerates.
 
 ## Images
-![AfterColorMapping(1)](https://github.com/DoctorChair/VulkanRaytracer/assets/25391031/cdbb1168-2b0a-4a7a-a63c-cfd2d3f314d0)
+![AfterColorMapping(1)](https://github.com/DoctorChair/VulkanRaytracer/assets/25391031/6112af3c-a2c9-4d2c-b303-31e62ade3792)
 
 Here the reflectivity was boosted to showcase mirroring effects.
-![FresnelEffect(1)](https://github.com/DoctorChair/VulkanRaytracer/assets/25391031/17600a69-0a3c-4869-a04f-c18c4fa3c5c1)
+![FresnelEffect(1)](https://github.com/DoctorChair/VulkanRaytracer/assets/25391031/6d92eda8-a32d-42f3-8f44-f1666f5375c1)
+
