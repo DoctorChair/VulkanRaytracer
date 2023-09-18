@@ -3,7 +3,7 @@ This program was created for my bachelor thesis.
 
 ## Building
 vcpkg is needed to build the programm in addition to a C++2017 capable compiler and a raytracing capable GPU.
-Used Libraries are:
+Used libraries are:
 * Vulkan
 * SDL2
 * assimp
